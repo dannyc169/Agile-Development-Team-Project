@@ -1,1 +1,3 @@
-print("new one")
+print("new onegi")
+
+print("new one two")
