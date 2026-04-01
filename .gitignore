@@ -1,0 +1,13 @@
+# Exclude specific template folders
+templates/feed/
+templates/todo/
+templates/wagers/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+env/
+*.sqlite3
