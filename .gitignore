@@ -1,0 +1,13 @@
+# Exclude specific template folders
+studysync/app/templates/feed/
+studysync/app/templates/todos/
+studysync/app/templates/wagers/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+env/
+*.sqlite3
