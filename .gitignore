@@ -1,7 +1,7 @@
 # Exclude specific template folders
-templates/feed/
-templates/todo/
-templates/wagers/
+studysync/app/templates/feed/
+studysync/app/templates/todos/
+studysync/app/templates/wagers/
 
 # Python
 __pycache__/
