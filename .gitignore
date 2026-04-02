@@ -1,6 +1,5 @@
 # Exclude specific template folders
 studysync/app/templates/feed/
-studysync/app/templates/todos/
 
 
 # Python
