@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - UWA StudySync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-700 via-indigo-600 to-purple-700 flex items-center justify-center p-6">
+    <div class="w-full max-w-md bg-white/95 backdrop-blur rounded-2xl shadow-2xl p-8">
+        <div class="text-center mb-8">
+            <div class="text-4xl mb-2">⚡</div>
+            <h1 class="text-3xl font-bold text-gray-900">StudySync</h1>
+            <p class="text-sm text-gray-600 mt-2">Sign in to continue</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="space-y-3 mb-6">
+                    {% for category, message in messages %}
+                        <div class="rounded-lg px-4 py-3 text-sm {% if category == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="post" class="space-y-4">
+            {{ form.hidden_tag() }}
+            <div>
+                {{ form.username.label(class_="block text-sm font-medium text-gray-700 mb-2") }}
+                {{ form.username(class_="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100", placeholder="Your username") }}
+                {% for error in form.username.errors %}<p class="text-sm text-red-600 mt-1">{{ error }}</p>{% endfor %}
+            </div>
+            <div>
+                {{ form.password.label(class_="block text-sm font-medium text-gray-700 mb-2") }}
+                {{ form.password(class_="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100", placeholder="Your password") }}
+                {% for error in form.password.errors %}<p class="text-sm text-red-600 mt-1">{{ error }}</p>{% endfor %}
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+                {{ form.remember_me(class_="rounded border-gray-300 text-indigo-600") }}
+                <span>Remember me</span>
+            </label>
+            <div class="text-right -mt-1">
+                <a href="{{ url_for('reset_password') }}" class="text-sm text-indigo-600 hover:text-indigo-700">Forgot password?</a>
+            </div>
+            <button type="submit" class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 transition">Login</button>
+        </form>
+
+        <p class="text-center text-sm text-gray-600 mt-6">
+            New here? <a href="{{ url_for('register') }}" class="text-indigo-600 font-semibold">Create account</a>
+        </p>
+    </div>
+</body>
+</html>
