@@ -10,3 +10,10 @@ __pycache__/
 venv/
 env/
 *.sqlite3
+instance/*.db
+instance/*.sqlite3
+instance/*.db-journal
+instance/.env
+studysync/instance/*.db
+studysync/instance/*.sqlite3
+studysync/instance/*.db-journal
