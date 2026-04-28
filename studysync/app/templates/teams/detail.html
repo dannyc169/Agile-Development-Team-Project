@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - StudySync{% endblock %}
+{% block page_title %}{{ team.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div class="space-y-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h1 class="text-3xl font-bold text-gray-900">{{ team.name }}</h1>
+                    {% if is_leader %}
+                        <span class="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 px-3 py-1 text-xs font-semibold">Leader</span>
+                    {% endif %}
+                </div>
+                <p class="text-gray-700 max-w-3xl">{{ team.description or 'No team description yet.' }}</p>
+                <div class="flex flex-wrap gap-4 text-sm text-gray-700">
+                    <span><strong>{{ member_count }}</strong> members</span>
+                    <span>Created {{ team.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+                    {% if leader_username %}<span>Leader: <strong>{{ leader_username }}</strong></span>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex flex-col items-start lg:items-end gap-3">
+                <div class="inline-flex items-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-full text-sm">
+                    <span class="text-gray-700 font-semibold">Invite code:</span>
+                    <code id="teamCodeValue" class="text-indigo-600 font-bold">{{ team.code }}</code>
+                    <button type="button" onclick="copyTeamCode()" class="text-gray-600 hover:text-indigo-600 transition" aria-label="Copy code">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+
+                {% if is_leader %}
+                    <div class="flex flex-wrap gap-3">
+                        <button type="button" onclick="openInviteModal()" class="px-4 py-2 rounded-lg border border-indigo-600 text-indigo-600 font-semibold hover:bg-indigo-50 transition">Invite Member</button>
+                        <button type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold opacity-80 cursor-not-allowed" disabled>Start wager</button>
+                        <button type="button" class="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold opacity-80 cursor-not-allowed" disabled>Assign task</button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-900">Members</h2>
+            <span class="text-sm text-gray-500">{{ member_count }} total</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {% for row in member_rows %}
+                <div class="rounded-xl border border-gray-200 p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center">
+                            {{ row.user.username[:1]|upper }}
+                        </div>
+                        <div>
+                            <div class="font-semibold text-gray-900">{{ row.user.username }}</div>
+                            <div class="text-sm text-gray-500">{{ row.role }}</div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if is_leader %}
+<div id="inviteModal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4 z-50">
+    <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Invite Member</h3>
+            <button type="button" onclick="closeInviteModal()" class="text-gray-500 hover:text-gray-800">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">Share this code with your teammate. They can join from <strong>/teams/join</strong>.</p>
+        <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-4">
+            <input id="inviteCodeInput" value="{{ team.code }}" readonly class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+            <button type="button" onclick="copyTeamCode()" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Copy code</button>
+        </div>
+        <div class="flex justify-end">
+            <button type="button" onclick="closeInviteModal()" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold">Close</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    function copyTeamCode() {
+        const code = document.getElementById('teamCodeValue').textContent.trim();
+        const input = document.getElementById('inviteCodeInput');
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(code).catch(function () {
+                if (input) {
+                    input.focus();
+                    input.select();
+                    document.execCommand('copy');
+                }
+            });
+            return;
+        }
+
+        if (input) {
+            input.focus();
+            input.select();
+        }
+        document.execCommand('copy');
+    }
+
+    function openInviteModal() {
+        const modal = document.getElementById('inviteModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+    }
+
+    function closeInviteModal() {
+        const modal = document.getElementById('inviteModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+</script>
+{% endblock %}
