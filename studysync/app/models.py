@@ -86,3 +86,21 @@ class Task(db.Model):
 
     user = db.relationship("User", backref=db.backref("tasks", lazy=True))
     team = db.relationship("Team", backref=db.backref("tasks", lazy=True))
+
+class Activity(db.Model):
+    __tablename__ = "activities"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
+
+    action_type = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    user = db.relationship("User", backref=db.backref("activities", lazy=True))
+    team = db.relationship("Team", backref=db.backref("activities", lazy=True))
+    task = db.relationship("Task", backref=db.backref("activities", lazy=True))
