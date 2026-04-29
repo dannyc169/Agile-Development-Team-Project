@@ -70,3 +70,19 @@ def is_team_leader(team_id, user_id):
 		TeamMember.query.filter_by(team_id=team_id, user_id=user_id, role="leader").first()
 		is not None
 	)
+
+class Task(db.Model):
+    __tablename__ = "tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    due_date = db.Column(db.DateTime(timezone=True), nullable=True)
+    priority = db.Column(db.String(20), nullable=False, default="medium")  # low / medium / high
+    status = db.Column(db.String(20), nullable=False, default="todo")      # todo / in_progress / done
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)  # NULL = personal task
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    user = db.relationship("User", backref=db.backref("tasks", lazy=True))
+    team = db.relationship("Team", backref=db.backref("tasks", lazy=True))
