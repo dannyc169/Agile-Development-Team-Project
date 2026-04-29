@@ -70,3 +70,57 @@ def is_team_leader(team_id, user_id):
 		TeamMember.query.filter_by(team_id=team_id, user_id=user_id, role="leader").first()
 		is not None
 	)
+class Wager(db.Model):
+	__tablename__ = "wagers"
+
+	id = db.Column(db.Integer, primary_key=True)
+	title = db.Column(db.String(120), nullable=False)
+	description = db.Column(db.Text, nullable=False)
+	team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
+	creator_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+	start_date = db.Column(db.Date, nullable=False)
+	end_date = db.Column(db.Date, nullable=False)
+	stake_amount = db.Column(db.Integer, nullable=False)
+	status = db.Column(db.String(20), nullable=False, default="active")
+	created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+	team = db.relationship("Team", backref="wagers")
+	creator = db.relationship("User", backref="created_wagers")
+	participants = db.relationship(
+		"WagerParticipant",
+		back_populates="wager",
+		cascade="all, delete-orphan"
+	)
+	linked_tasks = db.relationship(
+		"WagerTask",
+		back_populates="wager",
+		cascade="all, delete-orphan"
+	)
+
+
+class WagerParticipant(db.Model):
+	__tablename__ = "wager_participants"
+	__table_args__ = (
+		db.UniqueConstraint("wager_id", "user_id", name="uq_wager_participants_wager_user"),
+	)
+
+	id = db.Column(db.Integer, primary_key=True)
+	wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
+	user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+	joined_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+	progress = db.Column(db.Integer, nullable=False, default=0)
+	status = db.Column(db.String(20), nullable=False, default="on_track")
+	reward_amount = db.Column(db.Integer, nullable=False, default=0)
+
+	wager = db.relationship("Wager", back_populates="participants")
+	user = db.relationship("User", backref="wager_memberships")
+
+
+class WagerTask(db.Model):
+	__tablename__ = "wager_tasks"
+
+	id = db.Column(db.Integer, primary_key=True)
+	wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
+	task_name = db.Column(db.String(120), nullable=False)
+
+	wager = db.relationship("Wager", back_populates="linked_tasks")
