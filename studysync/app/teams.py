@@ -5,8 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.forms import TeamCreateForm, TeamJoinForm
-from app.models import Team, TeamMember, User, is_team_leader, is_team_member
-
+from app.models import Activity, Task, Team, TeamMember, User, is_team_leader, is_team_member
 
 teams_bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -87,6 +86,31 @@ def team_detail(team_id):
 	leader_username = next((row.user.username for row in member_rows if row.role == "leader"), None)
 	is_leader = is_team_leader(team.id, current_user.id)
 
+	todo_tasks = (
+		Task.query.filter_by(team_id=team.id, status="todo")
+		.order_by(Task.due_date.asc(), Task.created_at.desc())
+		.all()
+	)
+
+	in_progress_tasks = (
+		Task.query.filter_by(team_id=team.id, status="in_progress")
+		.order_by(Task.due_date.asc(), Task.created_at.desc())
+		.all()
+	)
+
+	done_tasks = (
+		Task.query.filter_by(team_id=team.id, status="done")
+		.order_by(Task.created_at.desc())
+		.all()
+	)
+
+	recent_activities = (
+		Activity.query.filter_by(team_id=team.id)
+		.order_by(Activity.created_at.desc())
+		.limit(5)
+		.all()
+	)
+
 	return render_template(
 		"teams/detail.html",
 		team=team,
@@ -94,4 +118,8 @@ def team_detail(team_id):
 		member_count=member_count,
 		leader_username=leader_username,
 		is_leader=is_leader,
+		todo_tasks=todo_tasks,
+		in_progress_tasks=in_progress_tasks,
+		done_tasks=done_tasks,
+		recent_activities=recent_activities,
 	)
