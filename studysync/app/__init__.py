@@ -42,12 +42,12 @@ def create_app():
 	login_manager.login_message_category = "error"
 	csrf.init_app(app)
 
-	# Import models so SQLAlchemy registers tables before create_all runs.
 	from app import models  # noqa: F401
 	from app.models import User
 	from app.teams import teams_bp
-
+	from app.tasks import tasks_bp
 	app.register_blueprint(teams_bp)
+	app.register_blueprint(tasks_bp)
 
 	@app.route("/")
 	def index():
@@ -59,10 +59,6 @@ def create_app():
 	@login_required
 	def dashboard():
 		return render_template("dashboard/index.html")
-
-	@app.route("/todos")
-	def todos():
-		return render_template("todos/index.html")
 
 	@app.route("/feed")
 	def feed():
