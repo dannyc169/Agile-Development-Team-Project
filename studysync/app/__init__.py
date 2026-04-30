@@ -249,7 +249,13 @@ def create_app():
     @app.route("/wagers")
     @login_required
     def wagers_detail():
-        latest_wager = Wager.query.order_by(Wager.created_at.desc()).first()
+        latest_wager = (
+            Wager.query
+            .join(TeamMember, Wager.team_id == TeamMember.team_id)
+            .filter(TeamMember.user_id == current_user.id)
+            .order_by(Wager.created_at.desc())
+            .first()
+        )
 
         if latest_wager is None:
             flash("No wager exists yet. Please create one first.", "info")
