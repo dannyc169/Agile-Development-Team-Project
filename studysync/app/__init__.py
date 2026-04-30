@@ -54,8 +54,10 @@ def create_app():
         WagerTask,
     )
     from app.teams import teams_bp
+    from app.tasks import tasks_bp
 
     app.register_blueprint(teams_bp)
+    app.register_blueprint(tasks_bp)
 
     def is_team_leader(team_id, user_id):
         return (
@@ -239,10 +241,6 @@ def create_app():
     @login_required
     def dashboard():
         return render_template("dashboard/index.html")
-
-    @app.route("/todos")
-    def todos():
-        return render_template("todos/index.html")
 
     @app.route("/feed")
     def feed():
