@@ -379,16 +379,17 @@ def create_app():
                     )
                 )
 
-            # Creator automatically joins the wager
-            db.session.add(
-                WagerParticipant(
-                    wager_id=new_wager.id,
-                    user_id=current_user.id,
-                    progress=0,
-                    status="on_track",
-                    reward_amount=0,
+            # All selected team members automatically join the wager
+            for member in selected_team.members:
+                db.session.add(
+                    WagerParticipant(
+                        wager_id=new_wager.id,
+                        user_id=member.user_id,
+                        progress=0,
+                        status="on_track",
+                        reward_amount=0,
+                    )
                 )
-            )
 
             db.session.commit()
 
