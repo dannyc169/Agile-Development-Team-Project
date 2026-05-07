@@ -419,7 +419,6 @@
         const code = document.getElementById('teamCodeValue').textContent.trim();
         const input = document.getElementById('inviteCodeInput');
         const statusEl = document.getElementById('copyStatus');
-        const btn = fromModal ? document.getElementById('modalCopyCodeBtn') : document.getElementById('copyCodeBtn');
 
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(code).then(function () {
