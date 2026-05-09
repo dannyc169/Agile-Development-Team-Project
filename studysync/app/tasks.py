@@ -106,3 +106,38 @@ def delete_task(task_id):
     db.session.commit()
     flash("Task deleted.", "success")
     return redirect(url_for("tasks.task_list"))
+
+
+
+@tasks_bp.route("/tasks/<int:task_id>/edit", methods=["POST"])
+@login_required
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    if task.user_id != current_user.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    title = request.form.get("title", "").strip()
+    if not title:
+        flash("Task title is required.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    task.title = title
+    task.description = request.form.get("description", "").strip() or None
+    task.priority = request.form.get("priority", "medium")
+    team_id = request.form.get("team_id") or None
+    task.team_id = int(team_id) if team_id else None
+
+    due_date_str = request.form.get("due_date", "").strip()
+    if due_date_str:
+        try:
+            task.due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for("tasks.task_list"))
+    else:
+        task.due_date = None
+
+    db.session.commit()
+    flash("Task updated!", "success")
+    return redirect(url_for("tasks.task_list"))
