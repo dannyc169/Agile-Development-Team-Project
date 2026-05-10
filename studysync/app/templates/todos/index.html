@@ -1,536 +1,385 @@
 {% extends "base.html" %}
 
 {% block title %}My Tasks - UWA StudySync{% endblock %}
-
 {% block page_title %}My Tasks{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
-    <!-- Top Action Bar -->
-    <div class="flex flex-col gap-4">
-        <!-- Filter Tabs & Search + New Task Button -->
-        <div class="flex items-center justify-between gap-4 flex-wrap">
-            <!-- Filter Tabs -->
-            <div class="flex gap-2">
-                <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab active"
-                    data-filter="all" style="background-color: #4F46E5; color: white;">
-                    All
-                </button>
-                <button
-                    class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
-                    data-filter="todo">
-                    Todo
-                </button>
-                <button
-                    class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
-                    data-filter="in-progress">
-                    In Progress
-                </button>
-                <button
-                    class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
-                    data-filter="done">
-                    Done
-                </button>
-            </div>
 
-            <!-- New Task Button -->
-            <button id="newTaskBtn"
-                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition flex items-center gap-2 shadow-sm hover:shadow-md">
-                <i class="fas fa-plus"></i>
-                New Task
-            </button>
-        </div>
-
-        <!-- Search Bar -->
-        <div class="flex gap-4">
-            <div class="relative flex-1">
-                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                <input type="text" placeholder="Search tasks..."
-                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 shadow-sm">
-            </div>
-        </div>
+  <!-- Top Action Bar -->
+  <div class="flex flex-col gap-4">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <!-- Filter Tabs -->
+      <div class="flex gap-2">
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab"
+          data-filter="all" style="background-color: #4F46E5; color: white;">All</button>
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
+          data-filter="todo">Todo</button>
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
+          data-filter="in_progress">In Progress</button>
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
+          data-filter="done">Done</button>
+      </div>
+      <!-- New Task Button -->
+      <button id="newTaskBtn"
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition flex items-center gap-2 shadow-sm">
+        <i class="fas fa-plus"></i> New Task
+      </button>
     </div>
 
-    <!-- New Task Form Panel (Hidden by Default) -->
-    <div id="newTaskPanel" class="bg-white rounded-lg shadow border border-gray-200 p-6 hidden">
-        <h3 class="text-lg font-bold text-gray-900 mb-4">Create New Task</h3>
-        <form class="space-y-4" method="POST" action="{{ url_for('tasks.create_task') }}">
+    <!-- Search Bar -->
+    <div class="relative flex-1">
+      <i class="fas fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+      <input type="text" id="searchInput" placeholder="Search tasks..."
+        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 shadow-sm">
+    </div>
+  </div>
+
+  <!-- New Task Form Panel -->
+  <div id="newTaskPanel" class="bg-white rounded-lg shadow border border-gray-200 p-6 hidden">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">Create New Task</h3>
+    <form class="space-y-4" method="POST" action="{{ url_for('tasks.create_task') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Task Title</label>
+        <input type="text" name="title" placeholder="Enter task title"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+        <textarea name="description" placeholder="Add task details..." rows="3"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+          <input type="date" name="due_date" lang="en"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+          <select name="priority"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
+        <select name="team_id"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+          <option value="">No Team</option>
+          {% for team in teams %}
+          <option value="{{ team.id }}">{{ team.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex gap-2 pt-4">
+        <button type="submit"
+          class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition">
+          Create Task
+        </button>
+        <button type="button" id="cancelBtn"
+          class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-semibold text-sm transition">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Task List -->
+  <div class="space-y-6" id="taskList">
+
+    {% macro render_task(task, border_color) %}
+    {% set priority_colors = {
+      'high': 'bg-red-100 text-red-700',
+      'medium': 'bg-yellow-100 text-yellow-700',
+      'low': 'bg-green-100 text-green-700'
+    } %}
+    {% set status_dot = {
+      'todo': 'bg-red-500',
+      'in_progress': 'bg-yellow-500',
+      'done': 'bg-green-500'
+    } %}
+
+    <div class="bg-white border-l-4 {{ border_color }} rounded-lg p-4 hover:shadow-md transition-shadow task-card"
+      data-status="{{ task.status }}"
+      data-title="{{ task.title | lower }}">
+      <div class="flex items-start gap-4">
+
+        <!-- Status dot -->
+        <div class="flex items-center pt-1">
+          <div class="w-3 h-3 rounded-full {{ status_dot.get(task.status, 'bg-gray-400') }}"></div>
+        </div>
+
+        <!-- Main content -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start gap-3">
+            <!-- Checkbox → toggle done/todo -->
+            <form method="POST" action="{{ url_for('tasks.update_status', task_id=task.id) }}" class="mt-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="status" value="{{ 'todo' if task.status == 'done' else 'done' }}">
+              <input type="checkbox"
+                class="w-5 h-5 text-indigo-600 rounded cursor-pointer"
+                {{ 'checked' if task.status == 'done' else '' }}
+                onchange="this.form.submit()">
+            </form>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-sm {{ 'line-through text-gray-400' if task.status == 'done' else 'text-gray-900' }}">
+                {{ task.title }}
+              </p>
+              {% if task.description %}
+              <p class="text-xs text-gray-500 mt-1">{{ task.description }}</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Tags -->
+          <div class="flex flex-wrap gap-2 mt-3">
+            {% if task.due_date %}
+            <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+              {{ task.due_date.strftime('%b %d') }}
+            </span>
+            {% endif %}
+            <span class="inline-block {{ priority_colors.get(task.priority, 'bg-gray-100 text-gray-700') }} px-2 py-1 rounded text-xs font-semibold">
+              {{ task.priority | capitalize }}
+            </span>
+            {% if task.team %}
+            <span class="inline-block bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs">
+              {{ task.team.name }}
+            </span>
+            {% endif %}
+            <!-- Status badge -->
+            {% if task.status == 'in_progress' %}
+            <span class="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-semibold">In Progress</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-2 pt-1">
+          <button class="text-gray-400 hover:text-indigo-600 px-2 edit-btn"
+            data-task-id="{{ task.id }}"
+            data-title="{{ task.title }}"
+            data-description="{{ task.description or '' }}"
+            data-priority="{{ task.priority }}"
+            data-status="{{ task.status }}"
+            data-due-date="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}"
+            data-team-id="{{ task.team_id or '' }}">
+            <i class="fas fa-pencil text-sm"></i>
+          </button>
+          <form method="POST" action="{{ url_for('tasks.delete_task', task_id=task.id) }}"
+            onsubmit="return confirm('Delete this task?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <!-- Task Title -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Task Title</label>
-                <input type="text" name="title" placeholder="Enter task title"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-            </div>
-
-            <!-- Description -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea name="description" placeholder="Add task details..." rows="3"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"></textarea>
-            </div>
-
-            <!-- Due Date & Priority Row -->
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-                    <input type="date" name="due_date"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                    <select name="priority"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                        <option value="low">Low</option>
-                        <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Assign to Team -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
-                <select name="team_id"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                    <option value="">No Team</option>
-                    {% for team in teams %}
-                    <option value="{{ team.id }}">{{ team.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Buttons -->
-            <div class="flex gap-2 pt-4">
-                <button type="submit"
-                    class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition shadow-sm hover:shadow-md">
-                    Create Task
-                </button>
-                <button type="button" id="cancelBtn"
-                    class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-semibold text-sm transition">
-                    Cancel
-                </button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Task List -->
-    <div class="space-y-6">
-        <!-- OVERDUE SECTION -->
-        <div id="overdue-section">
-            <h3 class="text-sm font-bold text-red-600 uppercase tracking-wide mb-3 flex items-center gap-2">
-                <i class="fas fa-exclamation-circle"></i>
-                Overdue
-            </h3>
-            <div class="space-y-2">
-                <!-- Overdue Task 1 -->
-                <div
-                    class="bg-white border-l-4 border-red-500 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <!-- Left Section -->
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                        </div>
-
-                        <!-- Checkbox & Text -->
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Fix critical bug in login module</p>
-                                    <p class="text-xs text-gray-500 mt-1">Need to resolve authentication issue before
-                                        demo</p>
-                                </div>
-                            </div>
-
-                            <!-- Tags -->
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span
-                                    class="inline-block bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">OVERDUE</span>
-                                <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Mar
-                                    25</span>
-                                <span
-                                    class="inline-block bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">High</span>
-                                <span class="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">CITS3403
-                                    Squad</span>
-                            </div>
-                        </div>
-
-                        <!-- Right Section -->
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">45%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <button type="submit" class="text-gray-400 hover:text-red-600 px-2">
+              <i class="fas fa-trash text-sm"></i>
+            </button>
+          </form>
         </div>
 
-        <!-- DUE TODAY SECTION -->
-        <div id="today-section">
-            <h3 class="text-sm font-bold text-orange-600 uppercase tracking-wide mb-3 flex items-center gap-2">
-                <i class="fas fa-clock"></i>
-                Due Today
-            </h3>
-            <div class="space-y-2">
-                <!-- Due Today Task 1 -->
-                <div
-                    class="bg-white border-l-4 border-orange-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Complete Algorithm Assignment</p>
-                                    <p class="text-xs text-gray-500 mt-1">Submit final version with documentation</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span
-                                    class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Today</span>
-                                <span
-                                    class="inline-block bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-semibold">Medium</span>
-                                <span class="inline-block bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">Algo
-                                    Warriors</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">80%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Due Today Task 2 -->
-                <div
-                    class="bg-white border-l-4 border-orange-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer" checked>
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm line-through text-gray-500">Review
-                                        CITS3403 Module</p>
-                                    <p class="text-xs text-gray-500 mt-1">Go through all slides and notes</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span
-                                    class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Today</span>
-                                <span
-                                    class="inline-block bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Low</span>
-                                <span
-                                    class="inline-block bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs">CITS3403
-                                    Squad</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">100%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- UPCOMING SECTION -->
-        <div id="upcoming-section">
-            <h3 class="text-sm font-bold text-blue-600 uppercase tracking-wide mb-3 flex items-center gap-2">
-                <i class="fas fa-calendar"></i>
-                Upcoming
-            </h3>
-            <div class="space-y-2">
-                <!-- Upcoming Task 1 -->
-                <div
-                    class="bg-white border-l-4 border-blue-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Prepare for Final Exam</p>
-                                    <p class="text-xs text-gray-500 mt-1">Study chapters 1-8, create summary notes</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Mar
-                                    28</span>
-                                <span
-                                    class="inline-block bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">High</span>
-                                <span class="inline-block bg-teal-100 text-teal-700 px-2 py-1 rounded text-xs">Finals
-                                    Prep</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">25%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Task 2 -->
-                <div
-                    class="bg-white border-l-4 border-blue-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Project Presentation Slides</p>
-                                    <p class="text-xs text-gray-500 mt-1">Design and finalize presentation deck</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Mar
-                                    30</span>
-                                <span
-                                    class="inline-block bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-semibold">Medium</span>
-                                <span
-                                    class="inline-block bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs">CITS3403
-                                    Squad</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">60%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Task 3 -->
-                <div
-                    class="bg-white border-l-4 border-blue-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Update project documentation</p>
-                                    <p class="text-xs text-gray-500 mt-1">Add API documentation and deployment guide</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Apr
-                                    2</span>
-                                <span
-                                    class="inline-block bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Low</span>
-                                <span
-                                    class="inline-block bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs">CITS3403
-                                    Squad</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">40%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Task 4 -->
-                <div
-                    class="bg-white border-l-4 border-blue-400 rounded-lg p-4 hover:shadow-md transition-shadow task-card">
-                    <div class="flex items-start gap-4">
-                        <div class="flex items-center gap-3 pt-1">
-                            <span class="text-gray-400 cursor-move text-lg">⠿</span>
-                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox"
-                                    class="w-5 h-5 text-indigo-600 rounded mt-1 task-checkbox cursor-pointer">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-semibold text-gray-900 text-sm">Code review for team members</p>
-                                    <p class="text-xs text-gray-500 mt-1">Review 3 pull requests and provide feedback
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <span class="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">Apr
-                                    5</span>
-                                <span
-                                    class="inline-block bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-semibold">Medium</span>
-                                <span class="inline-block bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">Algo
-                                    Warriors</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 pt-1">
-                            <div class="text-right">
-                                <p class="text-xs font-semibold text-gray-700">0%</p>
-                            </div>
-                            <button
-                                class="px-3 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded text-xs font-semibold transition">
-                                Nudge
-                            </button>
-                            <button class="text-gray-400 hover:text-gray-600 text-lg">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
+    {% endmacro %}
 
-    <!-- Pagination -->
-    <div class="flex items-center justify-center gap-2 mt-8">
-        <button
-            class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-indigo-50 transition text-sm font-semibold">
-            <i class="fas fa-chevron-left"></i>
-        </button>
-        <button class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow-sm">1</button>
-        <button
-            class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-indigo-50 transition text-sm font-semibold">2</button>
-        <button
-            class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-indigo-50 transition text-sm font-semibold">3</button>
-        <span class="text-gray-500 text-sm">...</span>
-        <button
-            class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-indigo-50 transition text-sm font-semibold">
-            <i class="fas fa-chevron-right"></i>
-        </button>
+    <!-- OVERDUE -->
+    {% if overdue %}
+    <div id="overdue-section">
+      <h3 class="text-sm font-bold text-red-600 uppercase tracking-wide mb-3 flex items-center gap-2">
+        <i class="fas fa-exclamation-circle"></i> Overdue
+      </h3>
+      <div class="space-y-2">
+        {% for task in overdue %}{{ render_task(task, 'border-red-500') }}{% endfor %}
+      </div>
     </div>
+    {% endif %}
+
+    <!-- DUE TODAY -->
+    {% if due_today %}
+    <div id="today-section">
+      <h3 class="text-sm font-bold text-orange-600 uppercase tracking-wide mb-3 flex items-center gap-2">
+        <i class="fas fa-clock"></i> Due Today
+      </h3>
+      <div class="space-y-2">
+        {% for task in due_today %}{{ render_task(task, 'border-orange-400') }}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- UPCOMING -->
+    {% if upcoming %}
+    <div id="upcoming-section">
+      <h3 class="text-sm font-bold text-blue-600 uppercase tracking-wide mb-3 flex items-center gap-2">
+        <i class="fas fa-calendar"></i> Upcoming
+      </h3>
+      <div class="space-y-2">
+        {% for task in upcoming %}{{ render_task(task, 'border-blue-400') }}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- DONE -->
+    {% if done %}
+    <div id="done-section">
+      <h3 class="text-sm font-bold text-green-600 uppercase tracking-wide mb-3 flex items-center gap-2">
+        <i class="fas fa-check-circle"></i> Done
+      </h3>
+      <div class="space-y-2">
+        {% for task in done %}{{ render_task(task, 'border-green-400') }}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Empty state -->
+    {% if not overdue and not due_today and not upcoming and not done %}
+    <div class="text-center py-16 text-gray-400">
+      <i class="fas fa-check-circle text-4xl mb-3"></i>
+      <p class="text-lg font-semibold">No tasks yet</p>
+      <p class="text-sm">Click "New Task" to get started!</p>
+    </div>
+    {% endif %}
+
+  </div>
 </div>
 
+<!-- Edit Task Modal -->
+<div id="editModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">Edit Task</h3>
+    <form method="POST" id="editForm" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Task Title</label>
+        <input type="text" name="title" id="editTitle"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+        <textarea name="description" id="editDescription" rows="3"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+          <input type="date" name="due_date" id="editDueDate" lang="en"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+          <select name="priority" id="editPriority"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+        <select name="status" id="editStatus"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
+        <select name="team_id" id="editTeamId"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+          <option value="">No Team</option>
+          {% for team in teams %}
+          <option value="{{ team.id }}">{{ team.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="submit"
+          class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition">
+          Save Changes
+        </button>
+        <button type="button" id="closeEditModal"
+          class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-semibold text-sm transition">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Toggle New Task Form Panel
-    const newTaskBtn = document.getElementById('newTaskBtn');
-    const newTaskPanel = document.getElementById('newTaskPanel');
-    const cancelBtn = document.getElementById('cancelBtn');
+  // New Task panel toggle
+  document.getElementById('newTaskBtn').addEventListener('click', () => {
+    document.getElementById('newTaskPanel').classList.toggle('hidden');
+  });
+  document.getElementById('cancelBtn').addEventListener('click', () => {
+    document.getElementById('newTaskPanel').classList.add('hidden');
+  });
 
-    newTaskBtn.addEventListener('click', function () {
-        newTaskPanel.classList.toggle('hidden');
+  // Unified filter + search logic
+  let currentFilter = 'all';
+  let currentSearch = '';
+
+  function applyFilters() {
+    document.querySelectorAll('.task-card').forEach(card => {
+      const matchFilter = currentFilter === 'all' || card.dataset.status === currentFilter;
+      const matchSearch = card.dataset.title.includes(currentSearch);
+      card.style.display = (matchFilter && matchSearch) ? '' : 'none';
     });
+  }
 
-    cancelBtn.addEventListener('click', function () {
-        newTaskPanel.classList.add('hidden');
+  // Filter tabs
+  document.querySelectorAll('.filter-tab').forEach(tab => {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.filter-tab').forEach(t => {
+        t.style.backgroundColor = 'transparent';
+        t.style.color = '';
+        t.classList.add('text-gray-700');
+        t.classList.remove('text-white');
+      });
+      this.style.backgroundColor = '#4F46E5';
+      this.style.color = 'white';
+      this.classList.remove('text-gray-700');
+      this.classList.add('text-white');
+      currentFilter = this.dataset.filter;
+      applyFilters();
     });
+  });
 
-    // Task Checkbox Toggle
-    const checkboxes = document.querySelectorAll('.task-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function () {
-            const taskCard = this.closest('.task-card');
-            const taskTitle = taskCard.querySelector('p.font-semibold');
+  // Search
+  document.getElementById('searchInput').addEventListener('input', function () {
+    currentSearch = this.value.toLowerCase();
+    applyFilters();
+  });
 
-            if (this.checked) {
-                taskTitle.classList.add('line-through', 'text-gray-500');
-            } else {
-                taskTitle.classList.remove('line-through', 'text-gray-500');
-            }
-        });
+  // Edit modal
+  const editModal = document.getElementById('editModal');
+  const editForm = document.getElementById('editForm');
+
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const id = this.dataset.taskId;
+      editForm.action = `/tasks/${id}/edit`;
+      document.getElementById('editTitle').value = this.dataset.title;
+      document.getElementById('editDescription').value = this.dataset.description;
+      document.getElementById('editDueDate').value = this.dataset.dueDate;
+      document.getElementById('editPriority').value = this.dataset.priority;
+      document.getElementById('editStatus').value = this.dataset.status;
+      document.getElementById('editTeamId').value = this.dataset.teamId;
+      editModal.classList.remove('hidden');
     });
+  });
 
-    // Filter Tabs
-    const filterTabs = document.querySelectorAll('.filter-tab');
-    filterTabs.forEach(tab => {
-        tab.addEventListener('click', function () {
-            // Remove active state from all tabs
-            filterTabs.forEach(t => {
-                t.classList.remove('text-white');
-                t.classList.add('text-gray-700', 'hover:bg-gray-100');
-                t.style.backgroundColor = 'transparent';
-            });
+  document.getElementById('closeEditModal').addEventListener('click', () => {
+    editModal.classList.add('hidden');
+  });
 
-            // Add active state to clicked tab
-            this.classList.remove('text-gray-700', 'hover:bg-gray-100');
-            this.classList.add('text-white');
-            this.style.backgroundColor = '#4F46E5';
-        });
-    });
+  // Close modal clicking outside
+  editModal.addEventListener('click', function (e) {
+    if (e.target === this) this.classList.add('hidden');
+  });
 </script>
 {% endblock %}
