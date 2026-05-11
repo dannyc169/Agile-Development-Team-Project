@@ -62,7 +62,11 @@ def create_app():
 
     def is_team_leader(team_id, user_id):
         return (
-            TeamMember.query.filter_by(team_id=team_id, user_id=user_id, role="leader").first()
+            TeamMember.query.filter_by(
+                team_id=team_id,
+                user_id=user_id,
+                role="leader",
+            ).first()
             is not None
         )
 
@@ -141,7 +145,12 @@ def create_app():
         today = date.today()
 
         participants_view = []
-        status_counts = {"on_track": 0, "completed": 0, "at_risk": 0, "failed": 0}
+        status_counts = {
+            "on_track": 0,
+            "completed": 0,
+            "at_risk": 0,
+            "failed": 0,
+        }
         progress_sum = 0
 
         for idx, participant in enumerate(wager.participants):
@@ -152,19 +161,17 @@ def create_app():
             if tasks_total > 0:
                 progress_percent = min(100, int((tasks_done / tasks_total) * 100))
 
-            calculated_status = calculate_participant_status(
+            display_status = calculate_participant_status(
                 tasks_done,
                 tasks_total,
                 wager.end_date,
             )
-
-            participant.status = calculated_status
-            participant.reward_amount = calculate_reward_amount(
-                calculated_status,
+            display_reward = calculate_reward_amount(
+                display_status,
                 wager.stake_amount,
             )
 
-            status_counts[calculated_status] = status_counts.get(calculated_status, 0) + 1
+            status_counts[display_status] += 1
             progress_sum += progress_percent
 
             username = participant.user.username if participant.user else "Unknown"
@@ -177,13 +184,13 @@ def create_app():
                     "tasks_done": tasks_done,
                     "tasks_total": tasks_total,
                     "progress": progress_percent,
-                    "status": calculated_status.replace("_", " ").title(),
-                    "status_class": participant_status_class(calculated_status),
-                    "reward": participant.reward_amount,
-                    "row_class": participant_row_class(calculated_status),
-                    "name_class": participant_name_class(calculated_status),
-                    "done_class": participant_done_class(calculated_status),
-                    "progress_class": participant_progress_class(calculated_status),
+                    "status": display_status.replace("_", " ").title(),
+                    "status_class": participant_status_class(display_status),
+                    "reward": display_reward,
+                    "row_class": participant_row_class(display_status),
+                    "name_class": participant_name_class(display_status),
+                    "done_class": participant_done_class(display_status),
+                    "progress_class": participant_progress_class(display_status),
                 }
             )
 
@@ -205,7 +212,7 @@ def create_app():
             "team": wager.team.name if wager.team else "",
             "prize_pool": wager.stake_amount * max(total_participants, 1),
             "time_remaining": time_remaining,
-            "participants_on_track": status_counts.get("on_track", 0) + status_counts.get("completed", 0),
+            "participants_on_track": status_counts["on_track"] + status_counts["completed"],
             "total_participants": total_participants,
             "overall_progress": overall_progress,
             "goal": wager.description,
@@ -233,15 +240,15 @@ def create_app():
 
         if current_membership:
             current_status = calculate_participant_status(
-                current_membership.progress,
+                tasks_done,
                 total_tasks,
                 wager.end_date,
             )
-            current_membership.status = current_status
-            current_membership.reward_amount = calculate_reward_amount(
+            potential_reward = calculate_reward_amount(
                 current_status,
                 wager.stake_amount,
             )
+            stake_frozen = wager.stake_amount
 
             if current_status == "completed":
                 user_status_text = "You are COMPLETED ✅"
@@ -260,9 +267,6 @@ def create_app():
                 user_status_text = "You are ON TRACK 🎉"
                 user_status_subtext = f"Keep going! {remaining} task(s) remaining."
                 user_status_color = "text-green-600"
-
-            stake_frozen = wager.stake_amount
-            potential_reward = current_membership.reward_amount
 
         user_status_view = {
             "tasks_done": tasks_done,
@@ -286,8 +290,6 @@ def create_app():
             ],
         }
 
-        db.session.commit()
-
         return wager_view, participants_view, user_status_view
 
     @app.route("/")
@@ -309,8 +311,7 @@ def create_app():
     @login_required
     def wagers_detail():
         latest_wager = (
-            Wager.query
-            .join(TeamMember, Wager.team_id == TeamMember.team_id)
+            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
             .filter(TeamMember.user_id == current_user.id)
             .order_by(Wager.created_at.desc())
             .first()
