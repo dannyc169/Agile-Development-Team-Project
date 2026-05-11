@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Task, TeamMember
+from app.models import Task, Team, TeamMember, is_team_member, is_team_leader
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -94,6 +94,30 @@ def create_task():
             )
         except ValueError:
             flash("Invalid date format.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+    # If a team_id was provided, validate membership and leader permissions
+    if team_id:
+        try:
+            tid = int(team_id)
+        except (TypeError, ValueError):
+            flash("Invalid team selected.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # team must exist
+        team = Team.query.get(tid)
+        if team is None:
+            flash("Selected team not found.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # user must be a member
+        if not is_team_member(team.id, current_user.id):
+            flash("Not authorized to assign tasks to this team.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # only leader can assign tasks to the team
+        if not is_team_leader(team.id, current_user.id):
+            flash("Not authorized to assign tasks to this team.", "error")
             return redirect(url_for("tasks.task_list"))
 
     task = Task(

@@ -29,7 +29,7 @@
 
                 <div class="flex flex-wrap gap-4 text-sm text-gray-700">
                     <span><strong>{{ member_count }}</strong> members</span>
-                    <span>Created {{ team.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+                    <span>Created {{ team.created_at.strftime('%Y-%m-%d') }}</span>
 
                     {% if leader_username %}
                         <span>Leader: <strong>{{ leader_username }}</strong></span>
@@ -42,12 +42,14 @@
                     <span class="text-gray-700 font-semibold">Invite code:</span>
                     <code id="teamCodeValue" class="text-indigo-600 font-bold">{{ team.code }}</code>
 
-                    <button type="button"
+                    <button id="copyCodeBtn" type="button"
                             onclick="copyTeamCode()"
                             class="text-gray-600 hover:text-indigo-600 transition"
                             aria-label="Copy code">
                         <i class="fas fa-copy"></i>
                     </button>
+
+                    <span id="copyStatus" class="ml-2 text-sm text-green-600" style="display:none"></span>
                 </div>
 
                 {% if is_leader %}
@@ -55,15 +57,14 @@
                         <button type="button"
                                 onclick="openInviteModal()"
                                 class="px-4 py-2 rounded-lg border border-indigo-600 text-indigo-600 font-semibold hover:bg-indigo-50 transition">
-                            Invite Member
+                            Invite members
                         </button>
 
-                        <!-- Disabled for now because Wager is handled separately / later -->
-                        <button type="button"
-                                class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold opacity-80 cursor-not-allowed"
-                                disabled>
-                            Start wager
-                        </button>
+                        <!-- Create wager button visible only to leader (backend already enforces create) -->
+                        <a href="{{ url_for('create_wager') }}"
+                           class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition">
+                            Create wager
+                        </a>
 
                         <!-- Disabled for now because task creation is currently handled by the My Tasks page -->
                         <button type="button"
@@ -350,22 +351,41 @@
             </button>
         </div>
 
-        <p class="text-sm text-gray-600 mb-4">
-            Share this code with your teammate. They can join from <strong>/teams/join</strong>.
-        </p>
+            <p class="text-sm text-gray-600 mb-4">
+                Share this code or a join link with your teammate. They can join from <strong>/teams/join</strong> or use the direct link below.
+            </p>
 
-        <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-4">
-            <input id="inviteCodeInput"
-                   value="{{ team.code }}"
-                   readonly
-                   class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+            <div class="mb-3">
+                <label class="text-xs text-gray-500">Invite code</label>
+                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-2">
+                    <input id="inviteCodeInput"
+                           value="{{ team.code }}"
+                           readonly
+                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
 
-            <button type="button"
-                    onclick="copyTeamCode()"
-                    class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
-                Copy code
-            </button>
-        </div>
+                    <button id="modalCopyCodeBtn" type="button"
+                            onclick="copyTeamCode(true)"
+                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                        Copy code
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="text-xs text-gray-500">Join URL</label>
+                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3">
+                    <input id="joinLinkInput"
+                           value="{{ url_for('teams.join_team') }}?code={{ team.code }}"
+                           readonly
+                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+
+                    <button id="copyJoinLinkBtn" type="button"
+                            onclick="copyJoinLink()"
+                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                        Copy join link
+                    </button>
+                </div>
+            </div>
 
         <div class="flex justify-end">
             <button type="button"
@@ -384,27 +404,81 @@
      Handles copying invite code and opening/closing the invite modal.
 ========================== -->
 <script>
-    function copyTeamCode() {
+    function showTempStatus(el, msg, timeout = 2000) {
+        if (!el) return;
+        const prev = el.textContent;
+        el.textContent = msg;
+        el.style.display = '';
+        setTimeout(() => {
+            el.textContent = prev;
+            el.style.display = 'none';
+        }, timeout);
+    }
+
+    function copyTeamCode(fromModal = false) {
         const code = document.getElementById('teamCodeValue').textContent.trim();
         const input = document.getElementById('inviteCodeInput');
+        const statusEl = document.getElementById('copyStatus');
 
         if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(code).catch(function () {
+            navigator.clipboard.writeText(code).then(function () {
+                if (statusEl) showTempStatus(statusEl, 'Copied!');
+            }).catch(function () {
+                // fallback
                 if (input) {
                     input.focus();
                     input.select();
-                    document.execCommand('copy');
+                    try { document.execCommand('copy'); showTempStatus(statusEl, 'Copied!'); } catch (e) { alert('Copy failed. Please copy manually.'); }
+                } else {
+                    alert('Copy failed. Please copy manually.');
                 }
             });
             return;
         }
 
+        // Not secure context or clipboard API unavailable -> fallback to selecting the input
         if (input) {
             input.focus();
             input.select();
+            try {
+                document.execCommand('copy');
+                if (statusEl) showTempStatus(statusEl, 'Copied!');
+            } catch (e) {
+                alert('Your browser does not support clipboard actions. Please copy the code manually.');
+            }
+        } else {
+            alert('Your browser does not support clipboard actions. Please copy the code manually.');
+        }
+    }
+
+    function copyJoinLink() {
+        const linkInput = document.getElementById('joinLinkInput');
+        const joinLink = linkInput ? linkInput.value.trim() : null;
+        const statusEl = document.getElementById('copyStatus');
+
+        if (!joinLink) {
+            alert('Join link not available.');
+            return;
         }
 
-        document.execCommand('copy');
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(joinLink).then(function () {
+                if (statusEl) showTempStatus(statusEl, 'Join link copied!');
+            }).catch(function () {
+                try {
+                    linkInput.focus(); linkInput.select(); document.execCommand('copy'); if (statusEl) showTempStatus(statusEl, 'Join link copied!');
+                } catch (e) {
+                    alert('Copy failed. Please copy the join link manually.');
+                }
+            });
+            return;
+        }
+
+        try {
+            linkInput.focus(); linkInput.select(); document.execCommand('copy'); if (statusEl) showTempStatus(statusEl, 'Join link copied!');
+        } catch (e) {
+            alert('Your browser does not support clipboard actions. Please copy the join link manually.');
+        }
     }
 
     function openInviteModal() {
