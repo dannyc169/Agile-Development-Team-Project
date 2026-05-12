@@ -4,9 +4,31 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Task, Team, TeamMember
+from app.models import Task, Team, TeamMember, is_team_member, is_team_leader
 
 tasks_bp = Blueprint("tasks", __name__)
+
+
+def validate_team_id(team_id_str):
+    """Validate team_id belongs to current user."""
+    if not team_id_str:
+        return None, None
+    try:
+        team_id = int(team_id_str)
+    except ValueError:
+        return None, "Invalid team."
+    membership = TeamMember.query.filter_by(
+        team_id=team_id, user_id=current_user.id
+    ).first()
+    if not membership:
+        return None, "You are not a member of this team."
+    return team_id, None
+
+
+def validate_priority(priority):
+    if priority not in ("low", "medium", "high"):
+        return "medium"
+    return priority
 
 
 @tasks_bp.route("/todos")
@@ -14,7 +36,11 @@ tasks_bp = Blueprint("tasks", __name__)
 def task_list():
     now = datetime.now(timezone.utc)
 
-    tasks = Task.query.filter_by(user_id=current_user.id).all()
+    tasks = (
+        Task.query.filter_by(user_id=current_user.id)
+        .order_by(Task.due_date.asc(), Task.created_at.asc())
+        .all()
+    )
 
     overdue, due_today, upcoming, done = [], [], [], []
 
@@ -30,7 +56,6 @@ def task_list():
         else:
             upcoming.append(task)
 
-    # Get teams the user belongs to (for the "Assign to Team" dropdown)
     memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
     teams = [m.team for m in memberships]
 
@@ -53,16 +78,46 @@ def create_task():
         return redirect(url_for("tasks.task_list"))
 
     description = request.form.get("description", "").strip() or None
-    priority = request.form.get("priority", "medium")
+    priority = validate_priority(request.form.get("priority", "medium"))
     due_date_str = request.form.get("due_date", "").strip()
-    team_id = request.form.get("team_id") or None
+
+    team_id, err = validate_team_id(request.form.get("team_id"))
+    if err:
+        flash(err, "error")
+        return redirect(url_for("tasks.task_list"))
 
     due_date = None
     if due_date_str:
         try:
-            due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
         except ValueError:
             flash("Invalid date format.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+    # If a team_id was provided, validate membership and leader permissions
+    if team_id:
+        try:
+            tid = int(team_id)
+        except (TypeError, ValueError):
+            flash("Invalid team selected.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # team must exist
+        team = Team.query.get(tid)
+        if team is None:
+            flash("Selected team not found.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # user must be a member
+        if not is_team_member(team.id, current_user.id):
+            flash("Not authorized to assign tasks to this team.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        # only leader can assign tasks to the team
+        if not is_team_leader(team.id, current_user.id):
+            flash("Not authorized to assign tasks to this team.", "error")
             return redirect(url_for("tasks.task_list"))
 
     task = Task(
@@ -70,12 +125,57 @@ def create_task():
         description=description,
         priority=priority,
         due_date=due_date,
-        team_id=int(team_id) if team_id else None,
+        team_id=team_id,
         user_id=current_user.id,
     )
     db.session.add(task)
     db.session.commit()
     flash("Task created!", "success")
+    return redirect(url_for("tasks.task_list"))
+
+
+@tasks_bp.route("/tasks/<int:task_id>/edit", methods=["POST"])
+@login_required
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    if task.user_id != current_user.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    title = request.form.get("title", "").strip()
+    if not title:
+        flash("Task title is required.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    team_id, err = validate_team_id(request.form.get("team_id"))
+    if err:
+        flash(err, "error")
+        return redirect(url_for("tasks.task_list"))
+
+    task.title = title
+    task.description = request.form.get("description", "").strip() or None
+    task.priority = validate_priority(request.form.get("priority", "medium"))
+    task.team_id = team_id
+
+    # Status update from edit modal
+    new_status = request.form.get("status")
+    if new_status in ("todo", "in_progress", "done"):
+        task.status = new_status
+
+    due_date_str = request.form.get("due_date", "").strip()
+    if due_date_str:
+        try:
+            task.due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for("tasks.task_list"))
+    else:
+        task.due_date = None
+
+    db.session.commit()
+    flash("Task updated!", "success")
     return redirect(url_for("tasks.task_list"))
 
 

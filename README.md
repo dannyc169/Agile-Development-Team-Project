@@ -1,125 +1,144 @@
-# Agile-Development-Team-Project
+# StudySync
 
-StudySync is a web application for student collaboration, focused on registration/login, team creation, joining by invite code, and follow-up teamwork features.
+A lightweight Flask web application built as part of a UWA Agile Development project. StudySync helps student teams stay organized and accountable by providing team spaces, user authentication, and an incentive-based challenge system called Wagers.
 
-## Team Members
+This project is designed to be simple to run locally, easy to extend, and clear enough to serve as a student portfolio or capstone project.
 
-Please fill in the table below with your real team details:
+## Overview
 
-| UWA ID | Name | GitHub username |
-|---|---|---|
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
+StudySync provides a basic collaboration environment for student teams. Users can create or join teams, track shared goals, and participate in Wagers, team challenges that include stakes, deadlines, and task lists. The goal is to encourage motivation and consistent progress within groups.
+
+## Key Features
+
+### Authentication and Account Management
+
+- User registration and login using Flask-Login
+- Session management and logout
+- Change password for logged-in users
+- Demo-style password reset flow that can be extended to email token verification later
+
+### Teams
+
+- Create teams with a name and description
+- Join teams using a generated invite code
+- Role-based behavior, with team leader permissions enforced in key actions such as creating Wagers
+
+### Wagers (Team Challenges)
+
+Wagers convert team goals into structured challenges with clear incentives.
+
+- Team leaders can create Wagers with titles, descriptions, start/end dates, stake amounts, and checklists
+- Team members are automatically enrolled once a Wager is created
+- Participants track progress with statuses like On Track, At Risk, Completed, Failed
+- A simple prize-pool model based on stake amounts is illustrated through the interface
+
+### User Interface
+
+- Dashboard after login
+- Team pages for creating, joining, and viewing details
+- Wager creation and detail pages
+- Placeholder feed page for future updates
 
 ## Tech Stack
 
 - Backend: Flask
-- Database: SQLite (file-based)
-- ORM: Flask-SQLAlchemy / SQLAlchemy
-- Auth: Flask-Login
-- Forms and CSRF: Flask-WTF
-- Frontend styles: Tailwind CSS (CDN)
+- Database: SQLite, stored under `instance/`
+- ORM: SQLAlchemy / Flask-SQLAlchemy
+- Authentication: Flask-Login
+- Forms and CSRF protection: Flask-WTF
+- Frontend: HTML templates with Jinja and Tailwind CSS (CDN)
 
-## Local Setup and Run
+## Getting Started (Local Development)
 
-The following steps are based on the studysync directory.
+The following steps assume you are running commands inside the `studysync` directory.
 
 1. Enter the project directory
 
-	cd studysync
+```bash
+cd studysync
+```
 
 2. Create and activate a virtual environment
 
-	python3 -m venv .venv
-	source .venv/bin/activate
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
 3. Install dependencies
 
-	pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
+```
 
 4. Configure environment variables
 
-It is recommended to use a .env file (or export environment variables), and at minimum set SECRET_KEY.
+Set the Flask `SECRET_KEY` (recommended through a `.env` file or shell export):
 
-Example .env.example content:
+```bash
+export SECRET_KEY=replace-with-your-local-secret
+```
 
-	SECRET_KEY=replace-with-a-local-dev-secret
-
-If you prefer shell export:
-
-	export SECRET_KEY=replace-with-a-local-dev-secret
-
-Note: never commit real secrets to the repository.
+Do not commit real secrets into the repository.
 
 5. Initialize the database
 
-The current project uses db.create_all in run.py for automatic table creation.
-On first startup, a SQLite file is automatically created in the instance directory.
+Tables are automatically created on startup via `db.create_all()` in `run.py`.
+A SQLite file will be generated at:
 
-6. Start the service
+```text
+studysync/instance/studysync.db
+```
 
-	python3 run.py
+6. Run the application
 
-7. Open the app
+```bash
+python3 run.py
+```
 
-	http://127.0.0.1:5000/login
+7. Open in your browser
 
-## Database Notes
+- Login: http://127.0.0.1:5000/login
+- Register: http://127.0.0.1:5000/register
 
-- The database type is fixed to SQLite.
-- Default database file path: studysync/instance/studysync.db.
-- Postgres or MySQL is not required.
+## Quick Feature Walkthrough
 
-## Basic Feature Demo
+### Register
 
-1. Register
+Navigate to `/register`, create an account, and you will be redirected to the dashboard.
 
-- Open /register
-- Enter a username and password, then submit
-- Expected: registration succeeds and redirects to dashboard
+### Login / Logout
 
-2. Login / Logout
+Use `/login` to log in. The sidebar includes a logout button.
 
-- Open /login and sign in with a registered account
-- Expected: login succeeds and redirects to dashboard
-- Click the Logout button in the sidebar
-- Expected: logout succeeds and returns to /login
+### Create a Team
 
-2.1 Password Change (Logged-in)
+Go to `/teams` to create a new team. The team detail page will display its invite code.
 
-- After login, open /account/password
-- Enter current password, a new password (8+ characters), and confirmation
-- Expected: update succeeds, shows a message, and redirects to dashboard
+### Join a Team
 
-2.2 Password Reset (Logged-out demo flow)
+Log in as another user and go to `/teams/join`. Enter the invite code to join.
 
-- Click Forgot password? on /login
-- Open /reset-password, enter username or email + new password + confirm new password
-- Expected: shows "Password updated, please login." and returns to /login
-- Note: this is a simplified course demo flow and can later be replaced with an email token reset flow
+### Create a Wager (Team Leader)
 
-3. Create Team
+Visit `/wagers/create` and select a team you lead.
+Configure the stake, dates, tasks, and create the Wager.
+All team members will be automatically added as participants.
 
-- After login, open /teams
-- Click Create team
-- Fill in name and description, then submit
-- Expected: team is created, creator becomes leader automatically, redirects to team detail page, and shows invite code
+## Project Structure
 
-4. Join Team
-
-- Log in with another account
-- Open /teams/join
-- Enter invite code and submit
-- Expected: successfully joins and enters the team detail page
-- If invite code does not exist: an error message appears
-- If joining twice: a duplicate-join message appears
-
-## Tests
-
-Current automated tests: TBD
-
-Reserved test command:
-
-	pytest
+```text
+.
+├── README.md
+└── studysync/
+    ├── run.py
+    ├── requirements.txt
+    ├── seed.py
+    └── app/
+        ├── __init__.py
+        ├── models.py
+        ├── forms.py
+        ├── teams.py
+        ├── tasks.py
+        └── templates/
+```
