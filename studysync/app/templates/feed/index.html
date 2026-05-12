@@ -103,23 +103,31 @@
                         </div>
                     </div>
         
-                    <!-- Reactions placeholder.
-                         Real Like / Unlike functionality will be connected in the next commit. -->
+                    <!-- Reactions -->
                     <div class="flex items-center gap-4 py-3 border-t border-b border-gray-200">
+                        <form method="POST" action="{{ url_for('feed.toggle_activity_like', activity_id=activity.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="filter" value="{{ active_filter }}">
+                    
+                            <button type="submit"
+                                    class="flex items-center gap-2 text-sm transition
+                                    {% if activity.id in liked_activity_ids %}
+                                        text-indigo-600 font-semibold
+                                    {% else %}
+                                        text-gray-600 hover:text-indigo-600
+                                    {% endif %}">
+                                <i class="{% if activity.id in liked_activity_ids %}fas{% else %}far{% endif %} fa-thumbs-up"></i>
+                                <span>{{ like_counts.get(activity.id, 0) }}</span>
+                            </button>
+                        </form>
+                    
                         <button type="button"
                                 class="flex items-center gap-2 text-gray-400 text-sm cursor-not-allowed"
                                 disabled>
-                            <i class="fas fa-thumbs-up"></i>
-                            <span>Like</span>
-                        </button>
-        
-                        <button type="button"
-                                class="flex items-center gap-2 text-gray-400 text-sm cursor-not-allowed"
-                                disabled>
-                            <i class="fas fa-comment"></i>
+                            <i class="far fa-comment"></i>
                             <span>Comments later</span>
                         </button>
-                    </div>
+                    </div>                                
                 </div>
             {% else %}
                 <div class="bg-white rounded-lg shadow p-8 text-center">
