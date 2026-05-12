@@ -10,13 +10,30 @@
     <div class="lg:col-span-2 space-y-6">
         <!-- Filter Tabs -->
         <div class="flex gap-2">
-            <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab active" style="background-color: #4F46E5; color: white;">
+            <a href="{{ url_for('feed.activity_feed', filter='all') }}"
+               class="px-4 py-2 rounded-full font-semibold text-sm transition
+               {% if active_filter == 'all' %}
+                   bg-indigo-600 text-white
+               {% else %}
+                   text-gray-700 hover:bg-gray-100
+               {% endif %}">
                 All
-            </button>
-            <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100">
+            </a>
+        
+            <a href="{{ url_for('feed.activity_feed', filter='my-teams') }}"
+               class="px-4 py-2 rounded-full font-semibold text-sm transition
+               {% if active_filter == 'my-teams' %}
+                   bg-indigo-600 text-white
+               {% else %}
+                   text-gray-700 hover:bg-gray-100
+               {% endif %}">
                 My Teams
-            </button>
-            <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100">
+            </a>
+        
+            <!-- Friends is out of scope for the current MVP, so it is shown as disabled. -->
+            <button type="button"
+                    class="px-4 py-2 rounded-full font-semibold text-sm text-gray-400 bg-gray-100 cursor-not-allowed"
+                    disabled>
                 Friends
             </button>
         </div>
