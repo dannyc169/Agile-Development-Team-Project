@@ -88,22 +88,25 @@ def add_task_if_missing(title, description, status, priority, due_date, team, us
 
 
 def add_activity_if_missing(message, action_type, user, team, task=None):
-	"""Create a demo activity record if the same message does not already exist."""
-	existing_activity = Activity.query.filter_by(
-		message=message,
-		team_id=team.id,
-	).first()
+    """Create a demo activity record if the same message does not already exist."""
+    existing_activity = Activity.query.filter_by(
+        message=message,
+        team_id=team.id,
+    ).first()
 
-	if existing_activity is None:
-		activity = Activity(
-			user_id=user.id,
-			team_id=team.id,
-			task_id=task.id if task else None,
-			action_type=action_type,
-			message=message,
-		)
-		db.session.add(activity)
-		db.session.commit()
+    if existing_activity is None:
+        activity = Activity(
+            user_id=user.id,
+            team_id=team.id,
+            task_id=task.id if task else None,
+            action_type=action_type,
+            message=message,
+        )
+        db.session.add(activity)
+        db.session.commit()
+        return activity
+
+    return existing_activity
 
 
 def add_activity_like_if_missing(activity, user):
