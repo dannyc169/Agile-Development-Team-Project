@@ -314,23 +314,3 @@
     </div>
 </div>
 {% endblock %}
-
-{% block scripts %}
-<script>
-    // Filter Tab Functionality
-    const filterTabs = document.querySelectorAll('.filter-tab');
-    filterTabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            filterTabs.forEach(t => {
-                t.classList.remove('text-white');
-                t.classList.add('text-gray-700', 'hover:bg-gray-100');
-                t.style.backgroundColor = 'transparent';
-            });
-            
-            this.classList.remove('text-gray-700', 'hover:bg-gray-100');
-            this.classList.add('text-white');
-            this.style.backgroundColor = '#4F46E5';
-        });
-    });
-</script>
-{% endblock %}
