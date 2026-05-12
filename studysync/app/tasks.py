@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Task, Team, TeamMember, is_team_member, is_team_leader
+from app.models import Task, TeamMember
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -37,7 +37,8 @@ def task_list():
     now = datetime.now(timezone.utc)
 
     tasks = (
-        Task.query.filter_by(user_id=current_user.id)
+        Task.query
+        .filter_by(user_id=current_user.id)
         .order_by(Task.due_date.asc(), Task.created_at.asc())
         .all()
     )
@@ -89,35 +90,9 @@ def create_task():
     due_date = None
     if due_date_str:
         try:
-            due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
+            due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except ValueError:
             flash("Invalid date format.", "error")
-            return redirect(url_for("tasks.task_list"))
-
-    # If a team_id was provided, validate membership and leader permissions
-    if team_id:
-        try:
-            tid = int(team_id)
-        except (TypeError, ValueError):
-            flash("Invalid team selected.", "error")
-            return redirect(url_for("tasks.task_list"))
-
-        # team must exist
-        team = Team.query.get(tid)
-        if team is None:
-            flash("Selected team not found.", "error")
-            return redirect(url_for("tasks.task_list"))
-
-        # user must be a member
-        if not is_team_member(team.id, current_user.id):
-            flash("Not authorized to assign tasks to this team.", "error")
-            return redirect(url_for("tasks.task_list"))
-
-        # only leader can assign tasks to the team
-        if not is_team_leader(team.id, current_user.id):
-            flash("Not authorized to assign tasks to this team.", "error")
             return redirect(url_for("tasks.task_list"))
 
     task = Task(
@@ -157,7 +132,6 @@ def edit_task(task_id):
     task.priority = validate_priority(request.form.get("priority", "medium"))
     task.team_id = team_id
 
-    # Status update from edit modal
     new_status = request.form.get("status")
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
@@ -165,9 +139,7 @@ def edit_task(task_id):
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
         try:
-            task.due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
+            task.due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
