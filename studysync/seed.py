@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import create_app, db
-from app.models import Activity, Task, Team, TeamMember, User
-
+from app.models import Activity, ActivityLike, Task, Team, TeamMember, User
 
 app = create_app()
 
@@ -105,6 +104,23 @@ def add_activity_if_missing(message, action_type, user, team, task=None):
 		)
 		db.session.add(activity)
 		db.session.commit()
+
+
+def add_activity_like_if_missing(activity, user):
+    """Create a demo like if the user has not already liked this activity."""
+    existing_like = ActivityLike.query.filter_by(
+        activity_id=activity.id,
+        user_id=user.id,
+    ).first()
+
+    if existing_like is None:
+        db.session.add(
+            ActivityLike(
+                activity_id=activity.id,
+                user_id=user.id,
+            )
+        )
+        db.session.commit()
 
 
 with app.app_context():
