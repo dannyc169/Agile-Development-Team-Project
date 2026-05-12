@@ -191,14 +191,14 @@ with app.app_context():
 	)
 
 	# Demo recent activity
-	add_activity_if_missing(
+	activity_one = add_activity_if_missing(
 		message="demo_leader created StudySync Demo Team.",
 		action_type="created_team",
 		user=leader,
 		team=team,
 	)
 
-	add_activity_if_missing(
+	activity_two = add_activity_if_missing(
 		message="demo_member started working on Build team detail page.",
 		action_type="moved_task_status",
 		user=member_one,
@@ -206,13 +206,20 @@ with app.app_context():
 		task=task_two,
 	)
 
-	add_activity_if_missing(
+	activity_three = add_activity_if_missing(
 		message="demo_partner completed Create Flask app skeleton.",
 		action_type="completed_task",
 		user=member_two,
 		team=team,
 		task=task_three,
 	)
+
+	# Demo likes for Activity Feed testing
+	add_activity_like_if_missing(activity_one, member_one)
+	add_activity_like_if_missing(activity_one, member_two)
+	add_activity_like_if_missing(activity_two, leader)
+	add_activity_like_if_missing(activity_three, leader)
+	add_activity_like_if_missing(activity_three, member_one)
 
 	print("Demo seed data created successfully.")
 	print("Login with:")
