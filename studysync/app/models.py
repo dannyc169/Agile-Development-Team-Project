@@ -116,6 +116,25 @@ class Activity(db.Model):
     team = db.relationship("Team", backref=db.backref("activities", lazy=True))
     task = db.relationship("Task", backref=db.backref("activities", lazy=True))
 
+class ActivityLike(db.Model):
+    __tablename__ = "activity_likes"
+    __table_args__ = (
+        db.UniqueConstraint("activity_id", "user_id", name="uq_activity_likes_activity_user"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    activity = db.relationship(
+        "Activity",
+        backref=db.backref("likes", lazy=True, cascade="all, delete-orphan"),
+    )
+    user = db.relationship(
+        "User",
+        backref=db.backref("activity_likes", lazy=True),
+    )
 
 class Wager(db.Model):
     __tablename__ = "wagers"
