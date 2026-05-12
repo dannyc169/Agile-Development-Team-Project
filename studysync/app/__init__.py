@@ -1,13 +1,18 @@
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
 from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 
 from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
-
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -43,7 +48,6 @@ def create_app():
     login_manager.login_message_category = "error"
     csrf.init_app(app)
 
-    # Import models so SQLAlchemy registers tables before create_all runs.
     from app import models  # noqa: F401
     from app.models import (
         User,
@@ -53,6 +57,7 @@ def create_app():
         Wager,
         WagerParticipant,
         WagerTask,
+        Task,
     )
     from app.teams import teams_bp
     from app.tasks import tasks_bp
@@ -301,7 +306,26 @@ def create_app():
     @app.route("/dashboard")
     @login_required
     def dashboard():
-        return render_template("dashboard/index.html")
+        now = datetime.now(timezone.utc)
+        today = now.date()
+
+        all_tasks = Task.query.filter_by(user_id=current_user.id).all()
+        todays_tasks = [
+            t for t in all_tasks if t.due_date and t.due_date.date() == today
+        ]
+        todays_done = [t for t in todays_tasks if t.status == "done"]
+
+        memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
+        teams = [m.team for m in memberships]
+
+        return render_template(
+            "dashboard/index.html",
+            todays_tasks=todays_tasks,
+            todays_done_count=len(todays_done),
+            todays_total_count=len(todays_tasks),
+            teams=teams,
+            active_teams_count=len(teams),
+        )
 
     @app.route("/feed")
     def feed():
@@ -321,7 +345,9 @@ def create_app():
             flash("No wager exists yet. Please create one first.", "info")
             return redirect(url_for("create_wager"))
 
-        wager_view, participants_view, user_status_view = build_wager_view_data(latest_wager)
+        wager_view, participants_view, user_status_view = build_wager_view_data(
+            latest_wager
+        )
 
         return render_template(
             "wagers/detail.html",
