@@ -480,41 +480,41 @@
             </button>
         </div>
 
-            <p class="text-sm text-gray-600 mb-4">
-                Share this code or a join link with your teammate. They can join from <strong>/teams/join</strong> or use the direct link below.
-            </p>
+        <p class="text-sm text-gray-600 mb-4">
+            Share this code or a join link with your teammate. They can join from <strong>/teams/join</strong> or use the direct link below.
+        </p>
 
-            <div class="mb-3">
-                <label class="text-xs text-gray-500">Invite code</label>
-                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-2">
-                    <input id="inviteCodeInput"
-                           value="{{ team.code }}"
-                           readonly
-                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+        <div class="mb-3">
+            <label class="text-xs text-gray-500">Invite code</label>
+            <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-2">
+                <input id="inviteCodeInput"
+                        value="{{ team.code }}"
+                        readonly
+                        class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
 
-                    <button id="modalCopyCodeBtn" type="button"
-                            onclick="copyTeamCode(true)"
-                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
-                        Copy code
-                    </button>
-                </div>
+                <button id="modalCopyCodeBtn" type="button"
+                        onclick="copyTeamCode(true)"
+                        class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                    Copy code
+                </button>
             </div>
+        </div>
 
-            <div class="mb-4">
-                <label class="text-xs text-gray-500">Join URL</label>
-                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3">
-                    <input id="joinLinkInput"
-                           value="{{ url_for('teams.join_team') }}?code={{ team.code }}"
-                           readonly
-                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+        <div class="mb-4">
+            <label class="text-xs text-gray-500">Join URL</label>
+            <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3">
+                <input id="joinLinkInput"
+                        value="{{ url_for('teams.join_team') }}?code={{ team.code }}"
+                        readonly
+                        class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
 
-                    <button id="copyJoinLinkBtn" type="button"
-                            onclick="copyJoinLink()"
-                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
-                        Copy join link
-                    </button>
-                </div>
+                <button id="copyJoinLinkBtn" type="button"
+                        onclick="copyJoinLink()"
+                        class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                    Copy join link
+                </button>
             </div>
+        </div>
 
         <div class="flex justify-end">
             <button type="button"
