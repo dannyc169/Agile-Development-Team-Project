@@ -183,6 +183,7 @@ def delete_task(task_id):
 def _sync_task_status(task):
     subtasks = task.subtasks
     if not subtasks:
+        task.status = "todo"
         return
     done_count = sum(1 for s in subtasks if s.is_done)
     if done_count == 0:
@@ -221,6 +222,9 @@ def toggle_subtask(task_id, subtask_id):
         return redirect(url_for("tasks.task_list"))
 
     subtask = Subtask.query.get_or_404(subtask_id)
+    if subtask.task_id != task_id:
+        flash("Not found.", "error")
+        return redirect(url_for("tasks.task_list"))
     subtask.is_done = not subtask.is_done
     _sync_task_status(task)
     db.session.commit()
@@ -236,6 +240,9 @@ def delete_subtask(task_id, subtask_id):
         return redirect(url_for("tasks.task_list"))
 
     subtask = Subtask.query.get_or_404(subtask_id)
+    if subtask.task_id != task_id:
+        flash("Not found.", "error")
+        return redirect(url_for("tasks.task_list"))
     db.session.delete(subtask)
     db.session.flush()
     _sync_task_status(task)
