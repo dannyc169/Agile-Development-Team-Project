@@ -112,6 +112,37 @@ def team_detail(team_id):
 		.all()
 	)
 
+	team_tasks = todo_tasks + in_progress_tasks + done_tasks
+	team_task_ids = [task.id for task in team_tasks]
+
+	latest_nudges_by_task = {}
+	cooldown_task_ids = set()
+
+	if team_task_ids:
+		all_recent_nudges = (
+			Nudge.query.filter(
+				Nudge.team_id == team.id,
+				Nudge.task_id.in_(team_task_ids),
+			)
+			.order_by(Nudge.created_at.desc())
+			.all()
+		)
+
+		for nudge in all_recent_nudges:
+			if nudge.task_id not in latest_nudges_by_task:
+				latest_nudges_by_task[nudge.task_id] = nudge
+
+		cooldown_start = datetime.now(timezone.utc) - timedelta(hours=24)
+		cooldown_task_ids = {
+			nudge.task_id
+			for nudge in Nudge.query.filter(
+				Nudge.team_id == team.id,
+				Nudge.nudger_id == current_user.id,
+				Nudge.task_id.in_(team_task_ids),
+				Nudge.created_at >= cooldown_start,
+			).all()
+		}
+
 	return render_template(
 		"teams/detail.html",
 		team=team,
@@ -123,6 +154,8 @@ def team_detail(team_id):
 		in_progress_tasks=in_progress_tasks,
 		done_tasks=done_tasks,
 		recent_activities=recent_activities,
+		latest_nudges_by_task=latest_nudges_by_task,
+		cooldown_task_ids=cooldown_task_ids,
 	)
 
 
