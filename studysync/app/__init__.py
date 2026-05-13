@@ -57,6 +57,8 @@ def create_app():
         Wager,
         WagerParticipant,
         WagerTask,
+        Subtask,  # noqa: F401
+
     )
     from app.teams import teams_bp
     from app.tasks import tasks_bp

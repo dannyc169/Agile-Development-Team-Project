@@ -98,6 +98,21 @@ class Task(db.Model):
     team = db.relationship("Team", backref=db.backref("tasks", lazy=True))
 
 
+class Subtask(db.Model):
+    __tablename__ = "subtasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    is_done = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    task = db.relationship(
+        "Task",
+        backref=db.backref("subtasks", lazy=True, cascade="all, delete-orphan"),
+    )
+
+
 class Activity(db.Model):
     __tablename__ = "activities"
 
