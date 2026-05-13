@@ -171,9 +171,11 @@ def edit_task(task_id):
     task.priority = validate_priority(request.form.get("priority", "medium"))
     task.team_id = team_id
 
+    old_status = task.status
     new_status = request.form.get("status")
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
+        create_task_status_activity(task, old_status, new_status)
 
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
