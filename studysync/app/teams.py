@@ -233,8 +233,8 @@ def nudge_task(team_id, task_id):
 		flash("You have already nudged this task in the last 24 hours.", "error")
 		return redirect(url_for("teams.team_detail", team_id=team.id))
 
-	recipient = User.query.get(task.user_id)
-
+	recipient = db.session.get(User, task.user_id)
+	
 	nudge = Nudge(
 		task_id=task.id,
 		team_id=team.id,
