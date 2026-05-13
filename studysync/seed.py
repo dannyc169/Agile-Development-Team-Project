@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import create_app, db
-from app.models import Activity, ActivityLike, Task, Team, TeamMember, User
+from app.models import Activity, ActivityLike, Nudge, Task, Team, TeamMember, User
 
 app = create_app()
 
@@ -126,6 +126,30 @@ def add_activity_like_if_missing(activity, user):
         db.session.commit()
 
 
+def add_nudge_if_missing(task, team, nudger, recipient, created_at):
+    """Create a demo nudge if the same nudger has not already nudged this task."""
+    existing_nudge = Nudge.query.filter_by(
+        task_id=task.id,
+        team_id=team.id,
+        nudger_id=nudger.id,
+        recipient_id=recipient.id,
+    ).first()
+
+    if existing_nudge is None:
+        nudge = Nudge(
+            task_id=task.id,
+            team_id=team.id,
+            nudger_id=nudger.id,
+            recipient_id=recipient.id,
+            created_at=created_at,
+        )
+        db.session.add(nudge)
+        db.session.commit()
+        return nudge
+
+    return existing_nudge
+
+
 with app.app_context():
 	# Make sure all tables exist before inserting demo data.
 	db.create_all()
@@ -220,6 +244,23 @@ with app.app_context():
 	add_activity_like_if_missing(activity_two, leader)
 	add_activity_like_if_missing(activity_three, leader)
 	add_activity_like_if_missing(activity_three, member_one)
+
+	# Demo nudge for Team Task Board testing
+	demo_nudge = add_nudge_if_missing(
+		task=task_two,
+		team=team,
+		nudger=member_two,
+		recipient=member_one,
+		created_at=now - timedelta(hours=25),
+	)
+
+	add_activity_if_missing(
+		message="demo_partner nudged demo_member to finish Build team detail page.",
+		action_type="nudged_member",
+		user=member_two,
+		team=team,
+		task=task_two,
+	)
 
 	print("Demo seed data created successfully.")
 	print("Login with:")
