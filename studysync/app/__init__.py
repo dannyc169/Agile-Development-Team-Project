@@ -57,7 +57,6 @@ def create_app():
         Wager,
         WagerParticipant,
         WagerTask,
-        Task,
     )
     from app.teams import teams_bp
     from app.tasks import tasks_bp
