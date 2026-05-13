@@ -132,6 +132,60 @@ class Activity(db.Model):
     task = db.relationship("Task", backref=db.backref("activities", lazy=True))
 
 
+class ActivityLike(db.Model):
+    __tablename__ = "activity_likes"
+    __table_args__ = (
+        db.UniqueConstraint("activity_id", "user_id", name="uq_activity_likes_activity_user"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    activity = db.relationship(
+        "Activity",
+        backref=db.backref("likes", lazy=True, cascade="all, delete-orphan"),
+    )
+    user = db.relationship(
+        "User",
+        backref=db.backref("activity_likes", lazy=True),
+    )
+
+
+class Nudge(db.Model):
+    __tablename__ = "nudges"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
+
+    nudger_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    recipient_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    task = db.relationship(
+        "Task",
+        backref=db.backref("nudges", lazy=True, cascade="all, delete-orphan"),
+    )
+    team = db.relationship(
+        "Team",
+        backref=db.backref("nudges", lazy=True, cascade="all, delete-orphan"),
+    )
+    nudger = db.relationship(
+        "User",
+        foreign_keys=[nudger_id],
+        backref=db.backref("sent_nudges", lazy=True),
+    )
+    recipient = db.relationship(
+        "User",
+        foreign_keys=[recipient_id],
+        backref=db.backref("received_nudges", lazy=True),
+    )
+
+
 class Wager(db.Model):
     __tablename__ = "wagers"
 
@@ -183,6 +237,7 @@ class WagerTask(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
-    task_name = db.Column(db.String(120), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
 
     wager = db.relationship("Wager", back_populates="linked_tasks")
+    task = db.relationship("Task", backref=db.backref("wager_links", lazy=True))
