@@ -1,5 +1,6 @@
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import or_
 
 from app import db
 from app.models import Activity, ActivityLike, TeamMember
@@ -8,23 +9,36 @@ from app.models import Activity, ActivityLike, TeamMember
 feed_bp = Blueprint("feed", __name__)
 
 
+def _current_user_team_ids():
+    """Return team ids that the current user belongs to."""
+    return [
+        membership.team_id
+        for membership in TeamMember.query.filter_by(user_id=current_user.id).all()
+    ]
+
+
+def _can_view_activity(activity, team_ids):
+    """Return whether the current user is allowed to view this activity."""
+    if activity.team_id is None:
+        return True
+
+    return activity.team_id in team_ids
+
+
 @feed_bp.route("/feed")
 @login_required
 def activity_feed():
-    """Render the Activity Feed page with basic All / My Teams filtering."""
+    """Render the Activity Feed page with visibility-aware filtering."""
     active_filter = request.args.get("filter", "all")
 
     if active_filter not in ("all", "my-teams"):
         active_filter = "all"
 
+    team_ids = _current_user_team_ids()
+
     activity_query = Activity.query.order_by(Activity.created_at.desc())
 
     if active_filter == "my-teams":
-        team_ids = [
-            membership.team_id
-            for membership in TeamMember.query.filter_by(user_id=current_user.id).all()
-        ]
-
         if team_ids:
             activity_query = activity_query.filter(Activity.team_id.in_(team_ids))
         else:
@@ -36,6 +50,16 @@ def activity_feed():
                 liked_activity_ids=set(),
                 like_counts={},
             )
+    else:
+        if team_ids:
+            activity_query = activity_query.filter(
+                or_(
+                    Activity.team_id.is_(None),
+                    Activity.team_id.in_(team_ids),
+                )
+            )
+        else:
+            activity_query = activity_query.filter(Activity.team_id.is_(None))
 
     activities = activity_query.limit(50).all()
     activity_ids = [activity.id for activity in activities]
@@ -67,8 +91,12 @@ def activity_feed():
 @feed_bp.route("/feed/<int:activity_id>/like", methods=["POST"])
 @login_required
 def toggle_activity_like(activity_id):
-    """Like or unlike an activity record for the current user."""
+    """Like or unlike an activity record if the current user can view it."""
     activity = Activity.query.get_or_404(activity_id)
+
+    team_ids = _current_user_team_ids()
+    if not _can_view_activity(activity, team_ids):
+        abort(403)
 
     active_filter = request.form.get("filter", "all")
     if active_filter not in ("all", "my-teams"):
