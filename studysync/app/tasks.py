@@ -200,10 +200,14 @@ def update_status(task_id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
+    old_status = task.status
     new_status = request.form.get("status")
+
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
+        create_task_status_activity(task, old_status, new_status)
         db.session.commit()
+
     return redirect(url_for("tasks.task_list"))
 
 
