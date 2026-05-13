@@ -124,10 +124,14 @@ def team_detail(team_id):
 	if total_tasks_count > 0:
 		completion_rate = int((done_tasks_count / total_tasks_count) * 100)
 
+	tasks_by_user_id = {}
+	for task in team_tasks:
+		tasks_by_user_id.setdefault(task.user_id, []).append(task)
+
 	member_task_stats = {}
 
 	for row in member_rows:
-		member_tasks = [task for task in team_tasks if task.user_id == row.user_id]
+		member_tasks = tasks_by_user_id.get(row.user_id, [])
 		member_total = len(member_tasks)
 		member_done = len([task for task in member_tasks if task.status == "done"])
 
