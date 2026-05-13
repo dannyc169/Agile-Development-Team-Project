@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Task, TeamMember
+from app.models import Activity, Task, TeamMember
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -29,6 +29,45 @@ def validate_priority(priority):
     if priority not in ("low", "medium", "high"):
         return "medium"
     return priority
+
+
+def format_status_label(status):
+    """Return a user-friendly task status label."""
+    labels = {
+        "todo": "Todo",
+        "in_progress": "In Progress",
+        "done": "Done",
+    }
+    return labels.get(status, status)
+
+
+def create_task_status_activity(task, old_status, new_status):
+    """Create an activity record when a team task status changes."""
+    if task.team_id is None:
+        return
+
+    if old_status == new_status:
+        return
+
+    if new_status == "done":
+        action_type = "completed_task"
+        message = f"{current_user.username} completed {task.title}."
+    else:
+        action_type = "moved_task_status"
+        message = (
+            f"{current_user.username} moved {task.title} "
+            f"from {format_status_label(old_status)} to {format_status_label(new_status)}."
+        )
+
+    db.session.add(
+        Activity(
+            user_id=current_user.id,
+            team_id=task.team_id,
+            task_id=task.id,
+            action_type=action_type,
+            message=message,
+        )
+    )
 
 
 @tasks_bp.route("/todos")
@@ -132,9 +171,11 @@ def edit_task(task_id):
     task.priority = validate_priority(request.form.get("priority", "medium"))
     task.team_id = team_id
 
+    old_status = task.status
     new_status = request.form.get("status")
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
+        create_task_status_activity(task, old_status, new_status)
 
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
@@ -159,10 +200,14 @@ def update_status(task_id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
+    old_status = task.status
     new_status = request.form.get("status")
+
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
+        create_task_status_activity(task, old_status, new_status)
         db.session.commit()
+
     return redirect(url_for("tasks.task_list"))
 
 

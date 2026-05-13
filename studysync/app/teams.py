@@ -115,6 +115,36 @@ def team_detail(team_id):
 	team_tasks = todo_tasks + in_progress_tasks + done_tasks
 	team_task_ids = [task.id for task in team_tasks]
 
+	total_tasks_count = len(team_tasks)
+	todo_tasks_count = len(todo_tasks)
+	in_progress_tasks_count = len(in_progress_tasks)
+	done_tasks_count = len(done_tasks)
+
+	completion_rate = 0
+	if total_tasks_count > 0:
+		completion_rate = int((done_tasks_count / total_tasks_count) * 100)
+
+	tasks_by_user_id = {}
+	for task in team_tasks:
+		tasks_by_user_id.setdefault(task.user_id, []).append(task)
+
+	member_task_stats = {}
+
+	for row in member_rows:
+		member_tasks = tasks_by_user_id.get(row.user_id, [])
+		member_total = len(member_tasks)
+		member_done = len([task for task in member_tasks if task.status == "done"])
+
+		member_completion_rate = 0
+		if member_total > 0:
+			member_completion_rate = int((member_done / member_total) * 100)
+
+		member_task_stats[row.user_id] = {
+			"total": member_total,
+			"done": member_done,
+			"completion_rate": member_completion_rate,
+		}
+
 	latest_nudges_by_task = {}
 	cooldown_task_ids = set()
 
@@ -156,6 +186,12 @@ def team_detail(team_id):
 		recent_activities=recent_activities,
 		latest_nudges_by_task=latest_nudges_by_task,
 		cooldown_task_ids=cooldown_task_ids,
+		total_tasks_count=total_tasks_count,
+		todo_tasks_count=todo_tasks_count,
+		in_progress_tasks_count=in_progress_tasks_count,
+		done_tasks_count=done_tasks_count,
+		completion_rate=completion_rate,
+		member_task_stats=member_task_stats,
 	)
 
 
@@ -201,8 +237,8 @@ def nudge_task(team_id, task_id):
 		flash("You have already nudged this task in the last 24 hours.", "error")
 		return redirect(url_for("teams.team_detail", team_id=team.id))
 
-	recipient = User.query.get(task.user_id)
-
+	recipient = db.session.get(User, task.user_id)
+	
 	nudge = Nudge(
 		task_id=task.id,
 		team_id=team.id,
@@ -227,3 +263,48 @@ def nudge_task(team_id, task_id):
 
 	flash("Nudge sent successfully.", "success")
 	return redirect(url_for("teams.team_detail", team_id=team.id))
+
+
+@teams_bp.route("/<int:team_id>/members/<int:user_id>/tasks")
+@login_required
+def member_tasks(team_id, user_id):
+	"""Show tasks assigned to a selected team member within the current team."""
+	team = Team.query.get_or_404(team_id)
+
+	if not is_team_member(team.id, current_user.id):
+		abort(403)
+
+	member_row = TeamMember.query.filter_by(
+		team_id=team.id,
+		user_id=user_id,
+	).first()
+
+	if member_row is None:
+		abort(404)
+
+	member_user = db.session.get(User, user_id)
+	if member_user is None:
+	    abort(404)
+	
+	member_tasks_list = (
+	    Task.query.filter_by(team_id=team.id, user_id=member_user.id)
+	    .order_by(Task.due_date.asc(), Task.created_at.desc())
+	    .all()
+	)
+	
+	todo_tasks = [task for task in member_tasks_list if task.status == "todo"]
+	in_progress_tasks = [task for task in member_tasks_list if task.status == "in_progress"]
+	done_tasks = [task for task in member_tasks_list if task.status == "done"]
+	
+	total_tasks = len(member_tasks_list)
+	
+	return render_template(
+		"teams/member_tasks.html",
+		team=team,
+		member_row=member_row,
+		member_user=member_user,
+		todo_tasks=todo_tasks,
+		in_progress_tasks=in_progress_tasks,
+		done_tasks=done_tasks,
+		total_tasks=total_tasks,
+	)

@@ -88,23 +88,41 @@
             <h2 class="text-xl font-bold text-gray-900">Team Members</h2>
             <span class="text-sm text-gray-500">{{ member_count }} total</span>
         </div>
-
+    
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {% for row in member_rows %}
                 <div class="rounded-xl border border-gray-200 p-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-11 h-11 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center">
-                            {{ row.user.username[:1]|upper }}
-                        </div>
-
-                        <div>
-                            <div class="font-semibold text-gray-900">
-                                {{ row.user.username }}
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center">
+                                {{ row.user.username[:1]|upper }}
                             </div>
-                            <div class="text-sm text-gray-500">
-                                {{ row.role }}
+    
+                            <div>
+                                <div class="font-semibold text-gray-900">
+                                    {{ row.user.username }}
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    {{ row.role }}
+                                </div>
+                                {% set stats = member_task_stats.get(row.user.id) %}
+                                {% if stats %}
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        {{ stats.done }}/{{ stats.total }} tasks done
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                                        <div class="bg-indigo-600 h-1.5 rounded-full"
+                                             style="width: {{ stats.completion_rate }}%">
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
+    
+                        <a href="{{ url_for('teams.member_tasks', team_id=team.id, user_id=row.user.id) }}"
+                           class="px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition">
+                            View Tasks
+                        </a>
                     </div>
                 </div>
             {% else %}
@@ -114,6 +132,55 @@
     </div>
 
 
+    <!-- =========================
+         Team Progress Summary Section
+         Shows overall task progress for the current team.
+    ========================== -->
+    <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900">Team Progress</h2>
+                <p class="text-sm text-gray-500">
+                    Overall progress based on tasks assigned to this team.
+                </p>
+            </div>
+    
+            <div class="text-right">
+                <p class="text-3xl font-bold text-indigo-600">{{ completion_rate }}%</p>
+                <p class="text-xs text-gray-500">completed</p>
+            </div>
+        </div>
+    
+        <div class="w-full bg-gray-100 rounded-full h-3 mb-5">
+            <div class="bg-indigo-600 h-3 rounded-full"
+                 style="width: {{ completion_rate }}%">
+            </div>
+        </div>
+    
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500">Total Tasks</p>
+                <p class="text-2xl font-bold text-gray-900">{{ total_tasks_count }}</p>
+            </div>
+    
+            <div class="rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500">Todo</p>
+                <p class="text-2xl font-bold text-gray-900">{{ todo_tasks_count }}</p>
+            </div>
+    
+            <div class="rounded-xl border border-indigo-200 p-4">
+                <p class="text-xs text-gray-500">In Progress</p>
+                <p class="text-2xl font-bold text-indigo-600">{{ in_progress_tasks_count }}</p>
+            </div>
+    
+            <div class="rounded-xl border border-green-200 p-4">
+                <p class="text-xs text-gray-500">Done</p>
+                <p class="text-2xl font-bold text-green-600">{{ done_tasks_count }}</p>
+            </div>
+        </div>
+    </div>
+
+    
     <!-- =========================
          Team Task Board Section
          Shows team tasks grouped by status:
@@ -413,41 +480,41 @@
             </button>
         </div>
 
-            <p class="text-sm text-gray-600 mb-4">
-                Share this code or a join link with your teammate. They can join from <strong>/teams/join</strong> or use the direct link below.
-            </p>
+        <p class="text-sm text-gray-600 mb-4">
+            Share this code or a join link with your teammate. They can join from <strong>/teams/join</strong> or use the direct link below.
+        </p>
 
-            <div class="mb-3">
-                <label class="text-xs text-gray-500">Invite code</label>
-                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-2">
-                    <input id="inviteCodeInput"
-                           value="{{ team.code }}"
-                           readonly
-                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+        <div class="mb-3">
+            <label class="text-xs text-gray-500">Invite code</label>
+            <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3 mb-2">
+                <input id="inviteCodeInput"
+                        value="{{ team.code }}"
+                        readonly
+                        class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
 
-                    <button id="modalCopyCodeBtn" type="button"
-                            onclick="copyTeamCode(true)"
-                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
-                        Copy code
-                    </button>
-                </div>
+                <button id="modalCopyCodeBtn" type="button"
+                        onclick="copyTeamCode(true)"
+                        class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                    Copy code
+                </button>
             </div>
+        </div>
 
-            <div class="mb-4">
-                <label class="text-xs text-gray-500">Join URL</label>
-                <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3">
-                    <input id="joinLinkInput"
-                           value="{{ url_for('teams.join_team') }}?code={{ team.code }}"
-                           readonly
-                           class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
+        <div class="mb-4">
+            <label class="text-xs text-gray-500">Join URL</label>
+            <div class="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-3">
+                <input id="joinLinkInput"
+                        value="{{ url_for('teams.join_team') }}?code={{ team.code }}"
+                        readonly
+                        class="flex-1 bg-transparent outline-none text-gray-900 font-semibold" />
 
-                    <button id="copyJoinLinkBtn" type="button"
-                            onclick="copyJoinLink()"
-                            class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
-                        Copy join link
-                    </button>
-                </div>
+                <button id="copyJoinLinkBtn" type="button"
+                        onclick="copyJoinLink()"
+                        class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">
+                    Copy join link
+                </button>
             </div>
+        </div>
 
         <div class="flex justify-end">
             <button type="button"
