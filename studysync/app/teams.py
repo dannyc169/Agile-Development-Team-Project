@@ -227,3 +227,54 @@ def nudge_task(team_id, task_id):
 
 	flash("Nudge sent successfully.", "success")
 	return redirect(url_for("teams.team_detail", team_id=team.id))
+
+
+@teams_bp.route("/<int:team_id>/members/<int:user_id>/tasks")
+@login_required
+def member_tasks(team_id, user_id):
+	"""Show tasks assigned to a selected team member within the current team."""
+	team = Team.query.get_or_404(team_id)
+
+	if not is_team_member(team.id, current_user.id):
+		abort(403)
+
+	member_row = TeamMember.query.filter_by(
+		team_id=team.id,
+		user_id=user_id,
+	).first()
+
+	if member_row is None:
+		abort(404)
+
+	member_user = User.query.get_or_404(user_id)
+
+	todo_tasks = (
+		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="todo")
+		.order_by(Task.due_date.asc(), Task.created_at.desc())
+		.all()
+	)
+
+	in_progress_tasks = (
+		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="in_progress")
+		.order_by(Task.due_date.asc(), Task.created_at.desc())
+		.all()
+	)
+
+	done_tasks = (
+		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="done")
+		.order_by(Task.created_at.desc())
+		.all()
+	)
+
+	total_tasks = len(todo_tasks) + len(in_progress_tasks) + len(done_tasks)
+
+	return render_template(
+		"teams/member_tasks.html",
+		team=team,
+		member_row=member_row,
+		member_user=member_user,
+		todo_tasks=todo_tasks,
+		in_progress_tasks=in_progress_tasks,
+		done_tasks=done_tasks,
+		total_tasks=total_tasks,
+	)
