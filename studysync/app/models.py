@@ -116,6 +116,7 @@ class Activity(db.Model):
     team = db.relationship("Team", backref=db.backref("activities", lazy=True))
     task = db.relationship("Task", backref=db.backref("activities", lazy=True))
 
+
 class ActivityLike(db.Model):
     __tablename__ = "activity_likes"
     __table_args__ = (
@@ -135,6 +136,7 @@ class ActivityLike(db.Model):
         "User",
         backref=db.backref("activity_likes", lazy=True),
     )
+
 
 class Nudge(db.Model):
     __tablename__ = "nudges"
@@ -167,6 +169,7 @@ class Nudge(db.Model):
         foreign_keys=[recipient_id],
         backref=db.backref("received_nudges", lazy=True),
     )
+
 
 class Wager(db.Model):
     __tablename__ = "wagers"
