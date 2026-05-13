@@ -282,7 +282,6 @@ def member_tasks(team_id, user_id):
 	if member_row is None:
 		abort(404)
 
-
 	member_user = db.session.get(User, user_id)
 	if member_user is None:
 	    abort(404)
