@@ -182,6 +182,12 @@ def team_detail(team_id):
 		recent_activities=recent_activities,
 		latest_nudges_by_task=latest_nudges_by_task,
 		cooldown_task_ids=cooldown_task_ids,
+		total_tasks_count=total_tasks_count,
+		todo_tasks_count=todo_tasks_count,
+		in_progress_tasks_count=in_progress_tasks_count,
+		done_tasks_count=done_tasks_count,
+		completion_rate=completion_rate,
+		member_task_stats=member_task_stats,
 	)
 
 
