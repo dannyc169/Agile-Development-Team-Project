@@ -61,9 +61,11 @@ def create_app():
     )
     from app.teams import teams_bp
     from app.tasks import tasks_bp
+    from app.feed import feed_bp
 
     app.register_blueprint(teams_bp)
     app.register_blueprint(tasks_bp)
+    app.register_blueprint(feed_bp)
 
     def is_team_leader(team_id, user_id):
         return (
@@ -326,10 +328,6 @@ def create_app():
             teams=teams,
             active_teams_count=len(teams),
         )
-
-    @app.route("/feed")
-    def feed():
-        return render_template("feed/index.html")
 
     @app.route("/wagers")
     @login_required
