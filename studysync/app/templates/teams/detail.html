@@ -180,6 +180,37 @@
                                     </span>
                                 {% endif %}
                             </div>
+
+                            {% set latest_nudge = latest_nudges_by_task.get(task.id) %}
+
+                            {% if latest_nudge %}
+                                <p class="text-xs text-orange-600 mt-3">
+                                    Last nudged by {{ latest_nudge.nudger.username }}
+                                    on {{ latest_nudge.created_at.strftime('%b %d, %H:%M') }}
+                                </p>
+                            {% endif %}
+                            
+                            <div class="mt-4">
+                                {% if task.user_id == current_user.id %}
+                                    <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-3 py-1 text-xs font-semibold">
+                                        Your task
+                                    </span>
+                                {% elif task.id in cooldown_task_ids %}
+                                    <button type="button"
+                                            class="px-3 py-1 rounded-lg bg-orange-100 text-orange-500 text-xs font-semibold cursor-not-allowed"
+                                            disabled>
+                                        Nudged recently
+                                    </button>
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('teams.nudge_task', team_id=team.id, task_id=task.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit"
+                                                class="px-3 py-1 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-semibold transition">
+                                            Nudge
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
                         </div>
                     {% else %}
                         <p class="text-sm text-gray-500">No todo tasks.</p>
@@ -235,6 +266,37 @@
                                     <span class="bg-gray-100 rounded-full px-2 py-1">
                                         Due {{ task.due_date.strftime('%b %d') }}
                                     </span>
+                                {% endif %}
+                            </div>
+                            
+                            {% set latest_nudge = latest_nudges_by_task.get(task.id) %}
+
+                            {% if latest_nudge %}
+                                <p class="text-xs text-orange-600 mt-3">
+                                    Last nudged by {{ latest_nudge.nudger.username }}
+                                    on {{ latest_nudge.created_at.strftime('%b %d, %H:%M') }}
+                                </p>
+                            {% endif %}
+                            
+                            <div class="mt-4">
+                                {% if task.user_id == current_user.id %}
+                                    <span class="inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-3 py-1 text-xs font-semibold">
+                                        Your task
+                                    </span>
+                                {% elif task.id in cooldown_task_ids %}
+                                    <button type="button"
+                                            class="px-3 py-1 rounded-lg bg-orange-100 text-orange-500 text-xs font-semibold cursor-not-allowed"
+                                            disabled>
+                                        Nudged recently
+                                    </button>
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('teams.nudge_task', team_id=team.id, task_id=task.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit"
+                                                class="px-3 py-1 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-semibold transition">
+                                            Nudge
+                                        </button>
+                                    </form>
                                 {% endif %}
                             </div>
                         </div>
