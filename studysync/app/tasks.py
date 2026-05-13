@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Task, TeamMember
+from app.models import Subtask, Task, TeamMember
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -177,4 +177,67 @@ def delete_task(task_id):
     db.session.delete(task)
     db.session.commit()
     flash("Task deleted.", "success")
+    return redirect(url_for("tasks.task_list"))
+
+
+def _sync_task_status(task):
+    subtasks = task.subtasks
+    if not subtasks:
+        return
+    done_count = sum(1 for s in subtasks if s.is_done)
+    if done_count == 0:
+        task.status = "todo"
+    elif done_count == len(subtasks):
+        task.status = "done"
+    else:
+        task.status = "in_progress"
+
+
+@tasks_bp.route("/tasks/<int:task_id>/subtasks", methods=["POST"])
+@login_required
+def add_subtask(task_id):
+    task = Task.query.get_or_404(task_id)
+    if task.user_id != current_user.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    title = request.form.get("title", "").strip()
+    if not title:
+        return redirect(url_for("tasks.task_list"))
+
+    db.session.add(Subtask(task_id=task.id, title=title))
+    db.session.flush()
+    _sync_task_status(task)
+    db.session.commit()
+    return redirect(url_for("tasks.task_list"))
+
+
+@tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/toggle", methods=["POST"])
+@login_required
+def toggle_subtask(task_id, subtask_id):
+    task = Task.query.get_or_404(task_id)
+    if task.user_id != current_user.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    subtask = Subtask.query.get_or_404(subtask_id)
+    subtask.is_done = not subtask.is_done
+    _sync_task_status(task)
+    db.session.commit()
+    return redirect(url_for("tasks.task_list"))
+
+
+@tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/delete", methods=["POST"])
+@login_required
+def delete_subtask(task_id, subtask_id):
+    task = Task.query.get_or_404(task_id)
+    if task.user_id != current_user.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    subtask = Subtask.query.get_or_404(subtask_id)
+    db.session.delete(subtask)
+    db.session.flush()
+    _sync_task_status(task)
+    db.session.commit()
     return redirect(url_for("tasks.task_list"))
