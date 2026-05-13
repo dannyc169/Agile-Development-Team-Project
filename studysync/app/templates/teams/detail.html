@@ -105,6 +105,17 @@
                                 <div class="text-sm text-gray-500">
                                     {{ row.role }}
                                 </div>
+                                {% set stats = member_task_stats.get(row.user.id) %}
+                                {% if stats %}
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        {{ stats.done }}/{{ stats.total }} tasks done
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                                        <div class="bg-indigo-600 h-1.5 rounded-full"
+                                             style="width: {{ stats.completion_rate }}%">
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
     
