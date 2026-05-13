@@ -278,28 +278,23 @@ def member_tasks(team_id, user_id):
 	if member_row is None:
 		abort(404)
 
-	member_user = User.query.get_or_404(user_id)
 
-	todo_tasks = (
-		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="todo")
-		.order_by(Task.due_date.asc(), Task.created_at.desc())
-		.all()
+	member_user = db.session.get(User, user_id)
+	if member_user is None:
+	    abort(404)
+	
+	member_tasks_list = (
+	    Task.query.filter_by(team_id=team.id, user_id=member_user.id)
+	    .order_by(Task.due_date.asc(), Task.created_at.desc())
+	    .all()
 	)
-
-	in_progress_tasks = (
-		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="in_progress")
-		.order_by(Task.due_date.asc(), Task.created_at.desc())
-		.all()
-	)
-
-	done_tasks = (
-		Task.query.filter_by(team_id=team.id, user_id=member_user.id, status="done")
-		.order_by(Task.created_at.desc())
-		.all()
-	)
-
-	total_tasks = len(todo_tasks) + len(in_progress_tasks) + len(done_tasks)
-
+	
+	todo_tasks = [task for task in member_tasks_list if task.status == "todo"]
+	in_progress_tasks = [task for task in member_tasks_list if task.status == "in_progress"]
+	done_tasks = [task for task in member_tasks_list if task.status == "done"]
+	
+	total_tasks = len(member_tasks_list)
+	
 	return render_template(
 		"teams/member_tasks.html",
 		team=team,
