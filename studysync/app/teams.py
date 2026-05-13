@@ -1,11 +1,12 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from app import db
 from app.forms import TeamCreateForm, TeamJoinForm
-from app.models import Activity, Task, Team, TeamMember, User, is_team_leader, is_team_member
+from app.models import Activity, Nudge, Task, Team, TeamMember, User, is_team_leader, is_team_member
 
 teams_bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -123,3 +124,73 @@ def team_detail(team_id):
 		done_tasks=done_tasks,
 		recent_activities=recent_activities,
 	)
+
+
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/nudge", methods=["POST"])
+@login_required
+def nudge_task(team_id, task_id):
+	"""Allow a team member to nudge another member's active team task."""
+	team = Team.query.get_or_404(team_id)
+
+	if not is_team_member(team.id, current_user.id):
+		abort(403)
+
+	task = Task.query.get_or_404(task_id)
+
+	if task.team_id != team.id:
+		abort(404)
+
+	if task.user_id == current_user.id:
+		flash("You cannot nudge your own task.", "error")
+		return redirect(url_for("teams.team_detail", team_id=team.id))
+
+	if task.status not in ("todo", "in_progress"):
+		flash("Only active tasks can be nudged.", "error")
+		return redirect(url_for("teams.team_detail", team_id=team.id))
+
+	if not is_team_member(team.id, task.user_id):
+		flash("You can only nudge members of this team.", "error")
+		return redirect(url_for("teams.team_detail", team_id=team.id))
+
+	cooldown_start = datetime.now(timezone.utc) - timedelta(hours=24)
+
+	recent_nudge = (
+		Nudge.query.filter_by(
+			task_id=task.id,
+			team_id=team.id,
+			nudger_id=current_user.id,
+		)
+		.filter(Nudge.created_at >= cooldown_start)
+		.first()
+	)
+
+	if recent_nudge is not None:
+		flash("You have already nudged this task in the last 24 hours.", "error")
+		return redirect(url_for("teams.team_detail", team_id=team.id))
+
+	recipient = User.query.get(task.user_id)
+
+	nudge = Nudge(
+		task_id=task.id,
+		team_id=team.id,
+		nudger_id=current_user.id,
+		recipient_id=task.user_id,
+	)
+
+	db.session.add(nudge)
+
+	recipient_name = recipient.username if recipient else "a team member"
+
+	activity = Activity(
+		user_id=current_user.id,
+		team_id=team.id,
+		task_id=task.id,
+		action_type="nudged_member",
+		message=f"{current_user.username} nudged {recipient_name} to finish {task.title}.",
+	)
+
+	db.session.add(activity)
+	db.session.commit()
+
+	flash("Nudge sent successfully.", "success")
+	return redirect(url_for("teams.team_detail", team_id=team.id))
