@@ -115,6 +115,32 @@ def team_detail(team_id):
 	team_tasks = todo_tasks + in_progress_tasks + done_tasks
 	team_task_ids = [task.id for task in team_tasks]
 
+	total_tasks_count = len(team_tasks)
+	todo_tasks_count = len(todo_tasks)
+	in_progress_tasks_count = len(in_progress_tasks)
+	done_tasks_count = len(done_tasks)
+
+	completion_rate = 0
+	if total_tasks_count > 0:
+		completion_rate = int((done_tasks_count / total_tasks_count) * 100)
+
+	member_task_stats = {}
+
+	for row in member_rows:
+		member_tasks = [task for task in team_tasks if task.user_id == row.user_id]
+		member_total = len(member_tasks)
+		member_done = len([task for task in member_tasks if task.status == "done"])
+
+		member_completion_rate = 0
+		if member_total > 0:
+			member_completion_rate = int((member_done / member_total) * 100)
+
+		member_task_stats[row.user_id] = {
+			"total": member_total,
+			"done": member_done,
+			"completion_rate": member_completion_rate,
+		}
+
 	latest_nudges_by_task = {}
 	cooldown_task_ids = set()
 
