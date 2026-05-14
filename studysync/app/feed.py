@@ -2,7 +2,7 @@ from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app import db
 from app.models import Activity, ActivityComment, ActivityLike, TeamMember, Task, User, Wager
@@ -123,9 +123,15 @@ def _build_leaderboard(team_ids):
 
     for user in users:
         completed_task_count = Task.query.filter(
-            Task.user_id == user.id,
             Task.status == "done",
             Task.team_id.in_(team_ids),
+            or_(
+                Task.assigned_to_user_id == user.id,
+                and_(
+                    Task.assigned_to_user_id.is_(None),
+                    Task.user_id == user.id,
+                ),
+            ),
         ).count()
 
         points = calculate_total_points(user.id, team_ids)
