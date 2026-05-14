@@ -3,7 +3,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app import db
-from app.models import Activity, ActivityLike, TeamMember
+from app.models import Activity, ActivityComment, ActivityLike, TeamMember
 
 
 feed_bp = Blueprint("feed", __name__)
@@ -121,4 +121,49 @@ def toggle_activity_like(activity_id):
 
     db.session.commit()
 
+    return redirect(url_for("feed.activity_feed", filter=active_filter))
+
+
+@feed_bp.route("/feed/<int:activity_id>/comments", methods=["POST"])
+@login_required
+def add_comment(activity_id):
+    activity = Activity.query.get_or_404(activity_id)
+
+    team_ids = _current_user_team_ids()
+    if not _can_view_activity(activity, team_ids):
+        abort(403)
+
+    if len(activity.comments) >= 50:
+        flash("Comment limit of 50 reached.", "error")
+        active_filter = request.form.get("filter", "all")
+        return redirect(url_for("feed.activity_feed", filter=active_filter))
+
+    body = request.form.get("body", "").strip()
+    if not body:
+        flash("Comment cannot be empty.", "error")
+        active_filter = request.form.get("filter", "all")
+        return redirect(url_for("feed.activity_feed", filter=active_filter))
+
+    db.session.add(ActivityComment(
+        activity_id=activity.id,
+        user_id=current_user.id,
+        body=body[:500],
+    ))
+    db.session.commit()
+
+    active_filter = request.form.get("filter", "all")
+    return redirect(url_for("feed.activity_feed", filter=active_filter))
+
+
+@feed_bp.route("/feed/<int:activity_id>/comments/<int:comment_id>/delete", methods=["POST"])
+@login_required
+def delete_comment(activity_id, comment_id):
+    comment = ActivityComment.query.get_or_404(comment_id)
+    if comment.activity_id != activity_id or comment.user_id != current_user.id:
+        abort(403)
+
+    db.session.delete(comment)
+    db.session.commit()
+
+    active_filter = request.form.get("filter", "all")
     return redirect(url_for("feed.activity_feed", filter=active_filter))
