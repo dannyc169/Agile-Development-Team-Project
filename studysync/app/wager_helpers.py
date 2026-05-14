@@ -1,7 +1,7 @@
 from datetime import date
 
 from app import db
-from app.models import Task, Wager, WagerParticipant, TeamMember
+from app.models import Task, TeamMember, Wager, WagerParticipant, WagerTask
 
 
 def resolve_linked_task(link, wager):
@@ -86,11 +86,10 @@ def calculate_reward_amount(status, stake_amount):
 
 def sync_wager_status(wager):
     """
-    Sync Wager and WagerParticipant status/progress in the database.
+    Sync Wager and WagerParticipant status/progress.
 
-    Current design:
-    Team wager uses team-level linked tasks.
-    All participants share the same progress.
+    This function only updates SQLAlchemy objects.
+    The caller is responsible for db.session.commit().
     """
     total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
 
@@ -135,34 +134,61 @@ def sync_wager_status(wager):
 
 
 def sync_wagers(wagers):
-    """Sync multiple wagers and commit only if something changed."""
+    """
+    Sync multiple wagers.
+
+    This function does not commit.
+    Do not call this from GET routes just to update the database.
+    """
     changed = False
 
     for wager in wagers:
         if sync_wager_status(wager):
             changed = True
 
-    if changed:
-        db.session.commit()
+    return changed
+
+
+def sync_wagers_for_task(task):
+    """
+    Sync all wagers linked to this task.
+
+    This should be called when task.status changes.
+    The caller is responsible for db.session.commit().
+    """
+    if task is None:
+        return False
+
+    linked_rows = WagerTask.query.filter_by(task_id=task.id).all()
+    wager_ids = [row.wager_id for row in linked_rows]
+
+    if not wager_ids:
+        return False
+
+    wagers = Wager.query.filter(Wager.id.in_(wager_ids)).all()
+
+    changed = False
+    for wager in wagers:
+        if sync_wager_status(wager):
+            changed = True
 
     return changed
 
 
 def count_wagers_won_for_user(user_id, team_ids=None):
     """Count how many wagers a user has completed."""
-    query = Wager.query
-
     if team_ids is not None:
         if not team_ids:
             return 0
-        query = query.filter(Wager.team_id.in_(team_ids))
+
+        wagers = Wager.query.filter(Wager.team_id.in_(team_ids)).all()
     else:
-        query = (
+        wagers = (
             Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
             .filter(TeamMember.user_id == user_id)
+            .all()
         )
 
-    wagers = query.all()
     won_count = 0
 
     for wager in wagers:
@@ -174,10 +200,9 @@ def count_wagers_won_for_user(user_id, team_ids=None):
         if not participant:
             continue
 
-        total_tasks = len(wager.linked_tasks)
-        done_count = count_done_tasks_for_wager(wager)
+        total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
-        if total_tasks > 0 and done_count >= total_tasks:
+        if total_tasks > 0 and done_tasks >= total_tasks:
             won_count += 1
 
     return won_count
@@ -185,19 +210,18 @@ def count_wagers_won_for_user(user_id, team_ids=None):
 
 def calculate_total_points(user_id, team_ids=None):
     """Calculate total wager points for a user."""
-    query = Wager.query
-
     if team_ids is not None:
         if not team_ids:
             return 0
-        query = query.filter(Wager.team_id.in_(team_ids))
+
+        wagers = Wager.query.filter(Wager.team_id.in_(team_ids)).all()
     else:
-        query = (
+        wagers = (
             Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
             .filter(TeamMember.user_id == user_id)
+            .all()
         )
 
-    wagers = query.all()
     total_points = 0
 
     for wager in wagers:
@@ -209,10 +233,9 @@ def calculate_total_points(user_id, team_ids=None):
         if not participant:
             continue
 
-        total_tasks = len(wager.linked_tasks)
-        done_count = count_done_tasks_for_wager(wager)
+        total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
-        if total_tasks > 0 and done_count >= total_tasks:
+        if total_tasks > 0 and done_tasks >= total_tasks:
             total_points += wager.stake_amount
 
     return total_points

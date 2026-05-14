@@ -9,7 +9,6 @@ from app.models import Activity, ActivityLike, TeamMember, Task, User, Wager
 from app.wager_helpers import (
     calculate_total_points,
     calculate_wager_progress,
-    sync_wagers,
 )
 
 
@@ -30,15 +29,6 @@ def _can_view_activity(activity, team_ids):
         return True
 
     return activity.team_id in team_ids
-
-
-def _sync_visible_wagers(team_ids):
-    """Sync wagers that belong to teams visible to the current user."""
-    if not team_ids:
-        return
-
-    wagers = Wager.query.filter(Wager.team_id.in_(team_ids)).all()
-    sync_wagers(wagers)
 
 
 def _build_active_wager_cards(team_ids):
@@ -185,7 +175,6 @@ def activity_feed():
         active_filter = "all"
 
     team_ids = _current_user_team_ids()
-    _sync_visible_wagers(team_ids)
 
     activity_query = Activity.query.order_by(Activity.created_at.desc())
 

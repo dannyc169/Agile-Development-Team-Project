@@ -70,11 +70,9 @@ def create_app():
         calculate_reward_amount,
         calculate_total_points,
         calculate_wager_progress,
-        count_done_tasks_for_wager,
         count_wagers_won_for_user,
         resolve_linked_task,
         sync_wager_status,
-        sync_wagers,
     )
 
     app.register_blueprint(teams_bp)
@@ -94,6 +92,7 @@ def create_app():
     def format_date(value):
         if not value:
             return ""
+
         return value.strftime("%Y-%m-%d")
 
     def avatar_color_for_index(index):
@@ -105,6 +104,7 @@ def create_app():
             "bg-teal-500",
             "bg-blue-500",
         ]
+
         return colors[index % len(colors)]
 
     def participant_status_class(status):
@@ -114,6 +114,7 @@ def create_app():
             "at_risk": "bg-yellow-200 text-yellow-800",
             "failed": "bg-red-200 text-red-800",
         }
+
         return mapping.get(status, "bg-gray-100 text-gray-700")
 
     def participant_progress_class(status):
@@ -123,6 +124,7 @@ def create_app():
             "at_risk": "bg-yellow-500",
             "failed": "bg-red-500",
         }
+
         return mapping.get(status, "bg-gray-400")
 
     def participant_row_class(status):
@@ -130,6 +132,7 @@ def create_app():
             "at_risk": "bg-yellow-50 hover:bg-yellow-100",
             "failed": "bg-red-50 hover:bg-red-100",
         }
+
         return mapping.get(status, "")
 
     def participant_name_class(status):
@@ -186,6 +189,7 @@ def create_app():
             "failed": "FAILED",
             "at_risk": "AT RISK",
         }
+
         return mapping.get(status_key, "ACTIVE")
 
     def build_wager_view_data(wager):
@@ -400,13 +404,6 @@ def create_app():
         memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
         teams = [membership.team for membership in memberships]
 
-        visible_wagers = (
-            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-            .filter(TeamMember.user_id == current_user.id)
-            .all()
-        )
-        sync_wagers(visible_wagers)
-
         dashboard_wager = build_dashboard_wager_card(current_user.id)
         wagers_won_count = count_wagers_won_for_user(current_user.id)
         current_points = calculate_total_points(current_user.id)
@@ -436,8 +433,6 @@ def create_app():
         if not wagers:
             flash("No wager exists yet. Please create one first.", "info")
             return redirect(url_for("create_wager"))
-
-        sync_wagers(wagers)
 
         sections = {
             "active": [],
