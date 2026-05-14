@@ -68,12 +68,18 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
-        <select name="team_id"
+        <select id="createTeamId" name="team_id"
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
           <option value="">No Team</option>
           {% for team in teams %}
           <option value="{{ team.id }}">{{ team.name }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div id="assigneeField" class="hidden">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Member</label>
+        <select id="assigneeSelect" name="assigned_to_user_id"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
         </select>
       </div>
       <div class="flex gap-2 pt-4">
@@ -204,7 +210,8 @@
             data-priority="{{ task.priority }}"
             data-status="{{ task.status }}"
             data-due-date="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}"
-            data-team-id="{{ task.team_id or '' }}">
+            data-team-id="{{ task.team_id or '' }}"
+            data-is-assignee="{{ '1' if task.assigned_to_user_id == current_user.id and task.user_id != current_user.id else '0' }}">
             <i class="fas fa-pencil text-sm"></i>
           </button>
           <form method="POST" action="{{ url_for('tasks.delete_task', task_id=task.id) }}"
@@ -303,13 +310,19 @@
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-sm font-medium text-gray-700">Priority</label>
+            <span id="priorityLockedNote" class="hidden text-xs text-gray-400 flex items-center gap-1">
+              <i class="fas fa-lock text-xs"></i> Set by team leader
+            </span>
+          </div>
           <select name="priority" id="editPriority"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
           </select>
+          <input type="hidden" id="editPriorityHidden" name="priority" disabled>
         </div>
       </div>
       <div>
@@ -347,13 +360,42 @@
 {% endblock %}
 
 {% block scripts %}
+<script type="application/json" id="teamMembersData">{{ team_members_map | tojson }}</script>
 <script>
+  // Leader team members map for assignee dropdown
+  const teamMembersMap = JSON.parse(document.getElementById('teamMembersData').textContent);
+
+  const createTeamSelect = document.getElementById('createTeamId');
+  const assigneeField = document.getElementById('assigneeField');
+  const assigneeSelect = document.getElementById('assigneeSelect');
+
+  function updateAssigneeField() {
+    const teamId = createTeamSelect.value;
+    const members = teamMembersMap[teamId];
+    if (members && members.length > 0) {
+      assigneeSelect.innerHTML = '<option value="">— No specific assignee —</option>';
+      members.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.username;
+        assigneeSelect.appendChild(opt);
+      });
+      assigneeField.classList.remove('hidden');
+    } else {
+      assigneeField.classList.add('hidden');
+      assigneeSelect.innerHTML = '';
+    }
+  }
+
+  createTeamSelect.addEventListener('change', updateAssigneeField);
+
   // New Task panel toggle
   document.getElementById('newTaskBtn').addEventListener('click', () => {
     document.getElementById('newTaskPanel').classList.toggle('hidden');
   });
   document.getElementById('cancelBtn').addEventListener('click', () => {
     document.getElementById('newTaskPanel').classList.add('hidden');
+    assigneeField.classList.add('hidden');
   });
 
   // Unified filter + search logic
@@ -396,6 +438,10 @@
   const editModal = document.getElementById('editModal');
   const editForm = document.getElementById('editForm');
 
+  const editPriority = document.getElementById('editPriority');
+  const editPriorityHidden = document.getElementById('editPriorityHidden');
+  const priorityLockedNote = document.getElementById('priorityLockedNote');
+
   document.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', function () {
       const id = this.dataset.taskId;
@@ -403,9 +449,18 @@
       document.getElementById('editTitle').value = this.dataset.title;
       document.getElementById('editDescription').value = this.dataset.description;
       document.getElementById('editDueDate').value = this.dataset.dueDate;
-      document.getElementById('editPriority').value = this.dataset.priority;
+      editPriority.value = this.dataset.priority;
       document.getElementById('editStatus').value = this.dataset.status;
       document.getElementById('editTeamId').value = this.dataset.teamId;
+
+      const isAssignee = this.dataset.isAssignee === '1';
+      editPriority.disabled = isAssignee;
+      editPriority.classList.toggle('opacity-50', isAssignee);
+      editPriority.classList.toggle('cursor-not-allowed', isAssignee);
+      editPriorityHidden.disabled = !isAssignee;
+      editPriorityHidden.value = this.dataset.priority;
+      priorityLockedNote.classList.toggle('hidden', !isAssignee);
+
       editModal.classList.remove('hidden');
     });
   });

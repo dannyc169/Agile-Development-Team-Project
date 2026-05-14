@@ -92,10 +92,12 @@ class Task(db.Model):
     status = db.Column(db.String(20), nullable=False, default="todo")
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
+    assigned_to_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
 
-    user = db.relationship("User", backref=db.backref("tasks", lazy=True))
+    user = db.relationship("User", foreign_keys=[user_id], backref=db.backref("tasks", lazy=True))
     team = db.relationship("Team", backref=db.backref("tasks", lazy=True))
+    assigned_to_user = db.relationship("User", foreign_keys=[assigned_to_user_id], backref=db.backref("assigned_tasks", lazy=True))
 
 
 class Subtask(db.Model):

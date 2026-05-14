@@ -2,6 +2,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, redirect, render_template, url_for
+from sqlalchemy import or_
 from flask_login import current_user, login_required
 
 from app import db
@@ -124,14 +125,15 @@ def team_detail(team_id):
 	if total_tasks_count > 0:
 		completion_rate = int((done_tasks_count / total_tasks_count) * 100)
 
-	tasks_by_user_id = {}
+	tasks_by_assignee_id = {}
 	for task in team_tasks:
-		tasks_by_user_id.setdefault(task.user_id, []).append(task)
+		effective_uid = task.assigned_to_user_id if task.assigned_to_user_id else task.user_id
+		tasks_by_assignee_id.setdefault(effective_uid, []).append(task)
 
 	member_task_stats = {}
 
 	for row in member_rows:
-		member_tasks = tasks_by_user_id.get(row.user_id, [])
+		member_tasks = tasks_by_assignee_id.get(row.user_id, [])
 		member_total = len(member_tasks)
 		member_done = len([task for task in member_tasks if task.status == "done"])
 
@@ -287,7 +289,13 @@ def member_tasks(team_id, user_id):
 	    abort(404)
 	
 	member_tasks_list = (
-	    Task.query.filter_by(team_id=team.id, user_id=member_user.id)
+	    Task.query.filter(
+	        Task.team_id == team.id,
+	        or_(
+	            Task.user_id == member_user.id,
+	            Task.assigned_to_user_id == member_user.id,
+	        ),
+	    )
 	    .order_by(Task.due_date.asc(), Task.created_at.desc())
 	    .all()
 	)
