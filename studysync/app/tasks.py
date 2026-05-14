@@ -7,6 +7,7 @@ from sqlalchemy import or_
 
 from app import db
 from app.models import Activity, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
+from app.wager_helpers import sync_wagers_for_task
 
 
 tasks_bp = Blueprint("tasks", __name__)
@@ -16,21 +17,27 @@ def validate_team_id(team_id_str):
     """Validate team_id belongs to current user."""
     if not team_id_str:
         return None, None
+
     try:
         team_id = int(team_id_str)
     except ValueError:
         return None, "Invalid team."
+
     membership = TeamMember.query.filter_by(
-        team_id=team_id, user_id=current_user.id
+        team_id=team_id,
+        user_id=current_user.id,
     ).first()
+
     if not membership:
         return None, "You are not a member of this team."
+
     return team_id, None
 
 
 def validate_priority(priority):
     if priority not in ("low", "medium", "high"):
         return "medium"
+
     return priority
 
 
@@ -41,6 +48,7 @@ def format_status_label(status):
         "in_progress": "In Progress",
         "done": "Done",
     }
+
     return labels.get(status, status)
 
 
@@ -71,6 +79,20 @@ def create_task_status_activity(task, old_status, new_status):
             message=message,
         )
     )
+
+
+def handle_task_status_change(task, old_status):
+    """
+    Handle side effects when task.status changes.
+
+    This is the correct place to sync related wagers.
+    GET pages should only read data and should not commit sync changes.
+    """
+    if task.status == old_status:
+        return
+
+    create_task_status_activity(task, old_status, task.status)
+    sync_wagers_for_task(task)
 
 
 @tasks_bp.route("/todos")
@@ -105,7 +127,7 @@ def task_list():
             upcoming.append(task)
 
     memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
-    teams = [m.team for m in memberships]
+    teams = [membership.team for membership in memberships]
 
     # Build member lists for teams where current user is leader (for assignee dropdown)
     team_members_map = {}
@@ -148,7 +170,10 @@ def create_task():
     due_date = None
     if due_date_str:
         try:
-            due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            due_date = datetime.strptime(
+                due_date_str,
+                "%Y-%m-%d",
+            ).replace(tzinfo=timezone.utc)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
@@ -188,8 +213,10 @@ def create_task():
         user_id=current_user.id,
         assigned_to_user_id=assigned_to_user_id,
     )
+
     db.session.add(task)
     db.session.commit()
+
     flash("Task created!", "success")
     return redirect(url_for("tasks.task_list"))
 
@@ -198,6 +225,7 @@ def create_task():
 @login_required
 def edit_task(task_id):
     task = Task.query.get_or_404(task_id)
+
     if task.user_id != current_user.id:
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
@@ -212,29 +240,35 @@ def edit_task(task_id):
         flash(err, "error")
         return redirect(url_for("tasks.task_list"))
 
+    old_status = task.status
+
     task.title = title
     task.description = request.form.get("description", "").strip() or None
     task.team_id = team_id
     if task.user_id == current_user.id:
         task.priority = validate_priority(request.form.get("priority", "medium"))
 
-    old_status = task.status
     new_status = request.form.get("status")
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
-        create_task_status_activity(task, old_status, new_status)
 
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
         try:
-            task.due_date = datetime.strptime(due_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            task.due_date = datetime.strptime(
+                due_date_str,
+                "%Y-%m-%d",
+            ).replace(tzinfo=timezone.utc)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
     else:
         task.due_date = None
 
+    handle_task_status_change(task, old_status)
+
     db.session.commit()
+
     flash("Task updated!", "success")
     return redirect(url_for("tasks.task_list"))
 
@@ -252,7 +286,7 @@ def update_status(task_id):
 
     if new_status in ("todo", "in_progress", "done"):
         task.status = new_status
-        create_task_status_activity(task, old_status, new_status)
+        handle_task_status_change(task, old_status)
         db.session.commit()
 
     return redirect(url_for("tasks.task_list"))
@@ -262,22 +296,27 @@ def update_status(task_id):
 @login_required
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
+
     if task.user_id != current_user.id:
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
     db.session.delete(task)
     db.session.commit()
+
     flash("Task deleted.", "success")
     return redirect(url_for("tasks.task_list"))
 
 
 def _sync_task_status(task):
     subtasks = task.subtasks
+
     if not subtasks:
         task.status = "todo"
         return
-    done_count = sum(1 for s in subtasks if s.is_done)
+
+    done_count = sum(1 for subtask in subtasks if subtask.is_done)
+
     if done_count == 0:
         task.status = "todo"
     elif done_count == len(subtasks):
@@ -298,10 +337,16 @@ def add_subtask(task_id):
     if not title:
         return redirect(url_for("tasks.task_list"))
 
+    old_status = task.status
+
     db.session.add(Subtask(task_id=task.id, title=title))
     db.session.flush()
+
     _sync_task_status(task)
+    handle_task_status_change(task, old_status)
+
     db.session.commit()
+
     return redirect(url_for("tasks.task_list"))
 
 
@@ -314,12 +359,19 @@ def toggle_subtask(task_id, subtask_id):
         return redirect(url_for("tasks.task_list"))
 
     subtask = Subtask.query.get_or_404(subtask_id)
+
     if subtask.task_id != task_id:
         flash("Not found.", "error")
         return redirect(url_for("tasks.task_list"))
+
+    old_status = task.status
+
     subtask.is_done = not subtask.is_done
     _sync_task_status(task)
+    handle_task_status_change(task, old_status)
+
     db.session.commit()
+
     return redirect(url_for("tasks.task_list"))
 
 
@@ -332,11 +384,19 @@ def delete_subtask(task_id, subtask_id):
         return redirect(url_for("tasks.task_list"))
 
     subtask = Subtask.query.get_or_404(subtask_id)
+
     if subtask.task_id != task_id:
         flash("Not found.", "error")
         return redirect(url_for("tasks.task_list"))
+
+    old_status = task.status
+
     db.session.delete(subtask)
     db.session.flush()
+
     _sync_task_status(task)
+    handle_task_status_change(task, old_status)
+
     db.session.commit()
+
     return redirect(url_for("tasks.task_list"))
