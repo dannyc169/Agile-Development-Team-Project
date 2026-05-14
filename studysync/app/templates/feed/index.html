@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
 {% block title %}Activity Feed - UWA StudySync{% endblock %}
-
 {% block page_title %}Activity Feed{% endblock %}
 
 {% block content %}
@@ -30,7 +29,6 @@
                 My Teams
             </a>
         
-            <!-- Friends is out of scope for the current MVP, so it is shown as disabled. -->
             <button type="button"
                     class="px-4 py-2 rounded-full font-semibold text-sm text-gray-400 bg-gray-100 cursor-not-allowed"
                     disabled>
@@ -157,80 +155,32 @@
         <div class="bg-white rounded-lg shadow p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">🏆 Leaderboard This Week</h2>
             <div class="space-y-3">
-                <!-- Rank 1 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-lg font-bold text-yellow-600 w-6">1</span>
-                    <div class="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        A
+                {% if leaderboard %}
+                    {% for item in leaderboard %}
+                    <div class="flex items-center gap-3 {% if item.is_current_user %}bg-indigo-50 rounded-lg p-2 border-2 border-indigo-200{% endif %}">
+                        <span class="text-lg font-bold w-6 {{ item.rank_class }}">{{ item.rank }}</span>
+
+                        <div class="w-8 h-8 rounded-full {{ item.avatar_class }} flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {{ item.initial }}
+                        </div>
+
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-gray-900">
+                                {{ item.name }}{% if item.is_current_user %} (You){% endif %}
+                            </p>
+                        </div>
+
+                        <div class="text-right">
+                            <p class="text-xs text-gray-600">{{ item.completed_task_count }} tasks</p>
+                            <p class="text-sm font-bold text-indigo-600">+{{ item.points }} pts</p>
+                        </div>
                     </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-900">Alex</p>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-sm text-gray-500">
+                        No leaderboard data yet.
                     </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-600">18 tasks</p>
-                        <p class="text-sm font-bold text-indigo-600">+420 pts</p>
-                    </div>
-                </div>
-                
-                <!-- Rank 2 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-lg font-bold text-gray-400 w-6">2</span>
-                    <div class="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        E
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-900">Emma</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-600">16 tasks</p>
-                        <p class="text-sm font-bold text-indigo-600">+380 pts</p>
-                    </div>
-                </div>
-                
-                <!-- Rank 3 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-lg font-bold text-orange-600 w-6">3</span>
-                    <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        R
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-900">Ryan</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-600">15 tasks</p>
-                        <p class="text-sm font-bold text-indigo-600">+350 pts</p>
-                    </div>
-                </div>
-                
-                <!-- Rank 4 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-lg font-bold text-gray-500 w-6">4</span>
-                    <div class="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        J
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-900">Jordan</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-600">13 tasks</p>
-                        <p class="text-sm font-bold text-indigo-600">+310 pts</p>
-                    </div>
-                </div>
-                
-                <!-- Rank 5 - Current User (Highlighted) -->
-                <div class="flex items-center gap-3 bg-indigo-50 rounded-lg p-2 border-2 border-indigo-200">
-                    <span class="text-lg font-bold text-indigo-600 w-6">5</span>
-                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        D
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-900">Danny (You)</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-600">12 tasks</p>
-                        <p class="text-sm font-bold text-indigo-600">+280 pts</p>
-                    </div>
-                </div>
+                {% endif %}
             </div>
         </div>
         
@@ -238,32 +188,24 @@
         <div class="bg-white rounded-lg shadow p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">⚡ Active Wagers</h2>
             <div class="space-y-3">
-                <!-- Wager 1 -->
-                <div class="border border-indigo-200 rounded-lg p-3 bg-indigo-50">
-                    <p class="text-sm font-semibold text-gray-900">Weekly Study Streak</p>
-                    <div class="flex items-center justify-between mt-2">
-                        <span class="text-xs text-gray-600">💎 500 pts</span>
-                        <span class="inline-block bg-indigo-600 text-white px-2 py-1 rounded text-xs font-semibold">2d left</span>
+                {% if active_wagers %}
+                    {% for wager in active_wagers %}
+                    <a href="{{ url_for('wagers_detail') }}"
+                       class="block rounded-lg p-3 transition hover:shadow {{ wager.container_class }}">
+                        <p class="text-sm font-semibold text-gray-900">{{ wager.title }}</p>
+                        <div class="flex items-center justify-between mt-2">
+                            <span class="text-xs text-gray-600">💎 {{ wager.prize_pool }} pts</span>
+                            <span class="inline-block px-2 py-1 rounded text-xs font-semibold {{ wager.badge_class }}">
+                                {{ wager.time_remaining }}
+                            </span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p class="text-sm text-gray-500">No active wagers.</p>
                     </div>
-                </div>
-                
-                <!-- Wager 2 -->
-                <div class="border border-purple-200 rounded-lg p-3 bg-purple-50">
-                    <p class="text-sm font-semibold text-gray-900">Daily Challenge</p>
-                    <div class="flex items-center justify-between mt-2">
-                        <span class="text-xs text-gray-600">💎 250 pts</span>
-                        <span class="inline-block bg-purple-600 text-white px-2 py-1 rounded text-xs font-semibold">1d left</span>
-                    </div>
-                </div>
-                
-                <!-- Wager 3 -->
-                <div class="border border-orange-200 rounded-lg p-3 bg-orange-50">
-                    <p class="text-sm font-semibold text-gray-900">Team Sprint</p>
-                    <div class="flex items-center justify-between mt-2">
-                        <span class="text-xs text-gray-600">💎 750 pts</span>
-                        <span class="inline-block bg-orange-600 text-white px-2 py-1 rounded text-xs font-semibold">5d left</span>
-                    </div>
-                </div>
+                {% endif %}
             </div>
         </div>
     </div>

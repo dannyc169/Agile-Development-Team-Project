@@ -34,7 +34,7 @@
             </div>
         </div>
 
-        <!-- Current Points Card (static for now) -->
+        <!-- Current Points Card (dynamic) -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-gray-600 text-sm font-medium">Current Points</h3>
@@ -42,12 +42,11 @@
             </div>
             <div class="flex items-end justify-between">
                 <div>
-                    <p class="text-3xl font-bold text-gray-900">1,200</p>
-                    <p class="text-sm text-gray-500">Total earned</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ "{:,}".format(current_points) }}</p>
+                    <p class="text-sm text-gray-500">From completed wagers</p>
                 </div>
-                <span
-                    class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                    <i class="fas fa-arrow-up"></i> +50 today
+                <span class="inline-flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-gem text-yellow-600 text-xl"></i>
                 </span>
             </div>
         </div>
@@ -76,7 +75,7 @@
             </div>
         </div>
 
-        <!-- Wagers Won Card (static for now) -->
+        <!-- Wagers Won Card (dynamic) -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-gray-600 text-sm font-medium">Wagers Won</h3>
@@ -84,8 +83,8 @@
             </div>
             <div class="flex items-end justify-between">
                 <div>
-                    <p class="text-3xl font-bold text-gray-900">5</p>
-                    <p class="text-sm text-gray-500">This semester</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ wagers_won_count }}</p>
+                    <p class="text-sm text-gray-500">Total completed</p>
                 </div>
                 <span class="inline-flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-lg">
                     <i class="fas fa-crown text-yellow-600 text-xl"></i>
@@ -203,27 +202,36 @@
                 </div>
             </div>
 
-            <!-- Active Wager Card (static, 4号负责) -->
+            <!-- Active Wager Card (dynamic) -->
             <div class="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg shadow p-6 text-white">
                 <h2 class="text-lg font-bold mb-2">Active Wager</h2>
-                <p class="text-indigo-100 text-sm mb-4">Weekly Study Streak</p>
-                <div class="mb-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm font-semibold">💎 Prize Pool</span>
-                        <span class="text-lg font-bold">500 pts</span>
+
+                {% if dashboard_wager %}
+                    <p class="text-indigo-100 text-sm mb-4">{{ dashboard_wager.title }}</p>
+                    <div class="mb-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold">💎 Prize Pool</span>
+                            <span class="text-lg font-bold">{{ dashboard_wager.prize_pool }} pts</span>
+                        </div>
+                        <div class="w-full bg-indigo-400 rounded-full h-2">
+                            <div class="bg-white h-2 rounded-full" style="width: {{ dashboard_wager.progress_percent }}%"></div>
+                        </div>
                     </div>
-                    <div class="w-full bg-indigo-400 rounded-full h-2">
-                        <div class="bg-white h-2 rounded-full" style="width: 65%"></div>
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold">Time Remaining</span>
+                        <span class="text-lg font-bold">{{ dashboard_wager.time_remaining }}</span>
                     </div>
-                </div>
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-sm font-semibold">Time Remaining</span>
-                    <span class="text-lg font-bold">2d 14h</span>
-                </div>
-                <a href="/wagers"
-                    class="inline-flex items-center gap-2 text-indigo-100 hover:text-white font-semibold text-sm transition">
-                    View Details <i class="fas fa-arrow-right"></i>
-                </a>
+                    <a href="/wagers"
+                        class="inline-flex items-center gap-2 text-indigo-100 hover:text-white font-semibold text-sm transition">
+                        View Details <i class="fas fa-arrow-right"></i>
+                    </a>
+                {% else %}
+                    <p class="text-indigo-100 text-sm mb-4">No active wager right now.</p>
+                    <a href="/wagers/create"
+                        class="inline-flex items-center gap-2 text-indigo-100 hover:text-white font-semibold text-sm transition">
+                        Create Wager <i class="fas fa-arrow-right"></i>
+                    </a>
+                {% endif %}
             </div>
 
             <!-- Badges Card (static) -->

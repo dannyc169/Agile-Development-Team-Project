@@ -58,7 +58,6 @@ def create_app():
         WagerParticipant,
         WagerTask,
         Subtask,  # noqa: F401
-
     )
     from app.teams import teams_bp
     from app.tasks import tasks_bp
@@ -135,17 +134,85 @@ def create_app():
             return "failed"
 
         days_left = (end_date_value - today).days
-        if days_left <= 2 and tasks_done == 0:
+        if days_left <= 2 and tasks_done < tasks_total:
             return "at_risk"
 
         return "on_track"
 
     def calculate_reward_amount(status, stake_amount):
         if status == "completed":
-            return stake_amount * 2
-        if status == "on_track":
+            return stake_amount
+        if status in {"on_track", "at_risk"}:
             return stake_amount
         return 0
+
+    def resolve_task_for_user(link, wager, user_id):
+        if getattr(link, "task", None) is not None:
+            if link.task.user_id == user_id:
+                return link.task
+            return None
+
+        if link.task_name:
+            return (
+                Task.query.filter_by(
+                    user_id=user_id,
+                    team_id=wager.team_id,
+                    title=link.task_name,
+                )
+                .order_by(Task.created_at.desc())
+                .first()
+            )
+
+        return None
+
+    def count_done_tasks_for_user(wager, user_id):
+        done_count = 0
+        for link in wager.linked_tasks:
+            linked_task = resolve_task_for_user(link, wager, user_id)
+            if linked_task is not None and linked_task.status == "done":
+                done_count += 1
+        return done_count
+
+    def get_required_tasks_for_user(wager, user_id):
+        tasks = []
+        for link in wager.linked_tasks:
+            linked_task = resolve_task_for_user(link, wager, user_id)
+            title = (
+                linked_task.title
+                if linked_task is not None
+                else (link.task_name or "Unknown Task")
+            )
+            done = linked_task is not None and linked_task.status == "done"
+            tasks.append(
+                {
+                    "title": title,
+                    "done": done,
+                }
+            )
+        return tasks
+
+    def calculate_wager_status_key(wager, status_counts, total_participants):
+        today = date.today()
+
+        if total_participants > 0 and status_counts["completed"] == total_participants:
+            return "completed"
+
+        if today > wager.end_date and status_counts["completed"] < total_participants:
+            return "failed"
+
+        if status_counts["at_risk"] > 0:
+            return "at_risk"
+
+        return "active"
+
+    def calculate_wager_status_label(status_key):
+        mapping = {
+            "active": "ACTIVE",
+            "completed": "COMPLETED",
+            "failed": "FAILED",
+            "at_risk": "AT RISK",
+        }
+        return mapping.get(status_key, "ACTIVE")
 
     def build_wager_view_data(wager):
         total_tasks = len(wager.linked_tasks)
@@ -162,8 +229,8 @@ def create_app():
         progress_sum = 0
 
         for idx, participant in enumerate(wager.participants):
-            tasks_done = participant.progress
             tasks_total = total_tasks
+            tasks_done = count_done_tasks_for_user(wager, participant.user_id)
 
             progress_percent = 0
             if tasks_total > 0:
@@ -213,10 +280,14 @@ def create_app():
             days_over = (today - wager.end_date).days
             time_remaining = f"Overdue by {days_over}d"
 
+        status_key = calculate_wager_status_key(wager, status_counts, total_participants)
+        status_label = calculate_wager_status_label(status_key)
+
         wager_view = {
             "id": wager.id,
             "title": wager.title,
-            "status": wager.status.upper(),
+            "status": status_label,
+            "status_key": status_key,
             "team": wager.team.name if wager.team else "",
             "prize_pool": wager.stake_amount * max(total_participants, 1),
             "time_remaining": time_remaining,
@@ -230,6 +301,7 @@ def create_app():
             "penalty_rule": "Miss deadline → lose full stake",
             "reward_rule": "Complete → get stake back + share of prize pool",
             "created_by": wager.creator.username if wager.creator else "",
+            "can_manage": current_user.is_authenticated and wager.creator_id == current_user.id,
         }
 
         current_membership = None
@@ -239,7 +311,7 @@ def create_app():
                 user_id=current_user.id,
             ).first()
 
-        tasks_done = current_membership.progress if current_membership else 0
+        tasks_done = 0
         user_status_text = "You have not joined this wager yet."
         user_status_subtext = "Create or join a wager to track your progress."
         user_status_color = "text-gray-600"
@@ -247,6 +319,8 @@ def create_app():
         potential_reward = 0
 
         if current_membership:
+            tasks_done = count_done_tasks_for_user(wager, current_user.id)
+
             current_status = calculate_participant_status(
                 tasks_done,
                 total_tasks,
@@ -264,7 +338,7 @@ def create_app():
                 user_status_color = "text-green-600"
             elif current_status == "at_risk":
                 user_status_text = "You are AT RISK ⚠️"
-                user_status_subtext = "You need to catch up before the deadline."
+                user_status_subtext = "The deadline is close and there is still work remaining."
                 user_status_color = "text-yellow-600"
             elif current_status == "failed":
                 user_status_text = "You have FAILED ❌"
@@ -284,21 +358,118 @@ def create_app():
             "status_color": user_status_color,
             "stake_frozen": stake_frozen,
             "potential_reward": potential_reward,
-            "required_tasks": [
-                {
-                    "title": link.task.title if link.task else "Unknown Task",
-                    "done": (
-                        current_user.is_authenticated
-                        and link.task is not None
-                        and link.task.user_id == current_user.id
-                        and link.task.status == "done"
-                    ),
-                }
-                for link in wager.linked_tasks
-            ],
+            "required_tasks": get_required_tasks_for_user(wager, current_user.id)
+            if current_user.is_authenticated
+            else [],
         }
 
         return wager_view, participants_view, user_status_view
+
+    def build_dashboard_wager_card(user_id):
+        today = date.today()
+
+        wagers = (
+            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
+            .filter(TeamMember.user_id == user_id)
+            .order_by(Wager.created_at.desc())
+            .all()
+        )
+
+        for wager in wagers:
+            total_tasks = len(wager.linked_tasks)
+            total_participants = len(wager.participants)
+
+            completed_participants = 0
+            for participant in wager.participants:
+                done_count = count_done_tasks_for_user(wager, participant.user_id)
+                if total_tasks > 0 and done_count >= total_tasks:
+                    completed_participants += 1
+
+            if total_participants > 0 and completed_participants == total_participants:
+                continue
+
+            if wager.end_date and wager.end_date < today:
+                continue
+
+            if wager.end_date:
+                days_left = (wager.end_date - today).days
+                time_remaining = f"{days_left}d left"
+                progress_percent = min(100, max(0, 100 - days_left * 5))
+            else:
+                time_remaining = "No deadline"
+                progress_percent = 50
+
+            return {
+                "id": wager.id,
+                "title": wager.title,
+                "prize_pool": wager.stake_amount * max(total_participants, 1),
+                "time_remaining": time_remaining,
+                "progress_percent": progress_percent,
+            }
+
+        return None
+
+    def count_dashboard_wagers_won(user_id):
+        wagers = (
+            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
+            .filter(TeamMember.user_id == user_id)
+            .all()
+        )
+
+        won_count = 0
+
+        for wager in wagers:
+            participant = WagerParticipant.query.filter_by(
+                wager_id=wager.id,
+                user_id=user_id,
+            ).first()
+
+            if not participant:
+                continue
+
+            total_tasks = len(wager.linked_tasks)
+            done_count = count_done_tasks_for_user(wager, user_id)
+
+            if total_tasks > 0 and done_count >= total_tasks:
+                won_count += 1
+
+        return won_count
+
+    def calculate_total_points(user_id):
+        wagers = (
+            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
+            .filter(TeamMember.user_id == user_id)
+            .all()
+        )
+
+        total_points = 0
+
+        for wager in wagers:
+            participant = WagerParticipant.query.filter_by(
+                wager_id=wager.id,
+                user_id=user_id,
+            ).first()
+
+            if not participant:
+                continue
+
+            total_tasks = len(wager.linked_tasks)
+            done_count = count_done_tasks_for_user(wager, user_id)
+
+            if total_tasks > 0 and done_count >= total_tasks:
+                total_points += wager.stake_amount
+
+        return total_points
+
+    @app.context_processor
+    def inject_global_points():
+        if current_user.is_authenticated:
+            return {
+                "current_points": calculate_total_points(current_user.id)
+            }
+        return {
+            "current_points": 0
+        }
 
     @app.route("/")
     def index():
@@ -321,6 +492,10 @@ def create_app():
         memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
         teams = [m.team for m in memberships]
 
+        dashboard_wager = build_dashboard_wager_card(current_user.id)
+        wagers_won_count = count_dashboard_wagers_won(current_user.id)
+        current_points = calculate_total_points(current_user.id)
+
         return render_template(
             "dashboard/index.html",
             todays_tasks=todays_tasks,
@@ -328,31 +503,49 @@ def create_app():
             todays_total_count=len(todays_tasks),
             teams=teams,
             active_teams_count=len(teams),
+            dashboard_wager=dashboard_wager,
+            wagers_won_count=wagers_won_count,
+            current_points=current_points,
         )
 
     @app.route("/wagers")
     @login_required
     def wagers_detail():
-        latest_wager = (
+        wagers = (
             Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
             .filter(TeamMember.user_id == current_user.id)
             .order_by(Wager.created_at.desc())
-            .first()
+            .all()
         )
 
-        if latest_wager is None:
+        if not wagers:
             flash("No wager exists yet. Please create one first.", "info")
             return redirect(url_for("create_wager"))
 
-        wager_view, participants_view, user_status_view = build_wager_view_data(
-            latest_wager
-        )
+        sections = {
+            "active": [],
+            "completed": [],
+            "failed": [],
+        }
+
+        for wager in wagers:
+            wager_view, participants_view, user_status_view = build_wager_view_data(wager)
+            item = {
+                "wager": wager_view,
+                "participants": participants_view,
+                "user_status": user_status_view,
+            }
+
+            if wager_view["status_key"] == "completed":
+                sections["completed"].append(item)
+            elif wager_view["status_key"] == "failed":
+                sections["failed"].append(item)
+            else:
+                sections["active"].append(item)
 
         return render_template(
             "wagers/detail.html",
-            wager=wager_view,
-            participants=participants_view,
-            user_status=user_status_view,
+            sections=sections,
         )
 
     @app.route("/wagers/create", methods=["GET", "POST"])
@@ -360,7 +553,10 @@ def create_app():
     def create_wager():
         teams = (
             Team.query.join(TeamMember, Team.id == TeamMember.team_id)
-            .filter(TeamMember.user_id == current_user.id)
+            .filter(
+                TeamMember.user_id == current_user.id,
+                TeamMember.role == "leader",
+            )
             .order_by(Team.name.asc())
             .all()
         )
@@ -369,7 +565,10 @@ def create_app():
         task_options = []
         if team_ids:
             task_options = (
-                Task.query.filter(Task.team_id.in_(team_ids))
+                Task.query.filter(
+                    Task.team_id.in_(team_ids),
+                    Task.status != "done",
+                )
                 .order_by(Task.created_at.asc())
                 .all()
             )
@@ -390,7 +589,7 @@ def create_app():
                 error = "Please choose a team."
             else:
                 try:
-                    selected_team = Team.query.get(int(team_id_raw))
+                    selected_team = db.session.get(Team, int(team_id_raw))
                 except ValueError:
                     selected_team = None
 
@@ -443,6 +642,8 @@ def create_app():
                         error = "Some selected tasks do not exist."
                     elif any(task.team_id != selected_team.id for task in selected_tasks):
                         error = "Selected tasks must belong to the chosen team."
+                    elif any(task.status == "done" for task in selected_tasks):
+                        error = "Completed tasks cannot be linked to a wager."
 
             if error:
                 return render_template(
@@ -479,6 +680,7 @@ def create_app():
                 db.session.add(
                     WagerTask(
                         wager_id=new_wager.id,
+                        task_name=task.title,
                         task_id=task.id,
                     )
                 )
@@ -514,6 +716,174 @@ def create_app():
                 "selected_tasks": [],
             },
         )
+
+    @app.route("/wagers/<int:wager_id>/edit", methods=["GET", "POST"])
+    @login_required
+    def edit_wager(wager_id):
+        wager = db.session.get(Wager, wager_id)
+        if wager is None:
+            flash("Wager not found.", "error")
+            return redirect(url_for("wagers_detail"))
+
+        if wager.creator_id != current_user.id:
+            flash("Only the creator can edit this wager.", "error")
+            return redirect(url_for("wagers_detail"))
+
+        teams = (
+            Team.query.join(TeamMember, Team.id == TeamMember.team_id)
+            .filter(
+                TeamMember.user_id == current_user.id,
+                TeamMember.role == "leader",
+            )
+            .order_by(Team.name.asc())
+            .all()
+        )
+
+        task_options = (
+            Task.query.filter(
+                Task.team_id == wager.team_id,
+                Task.status != "done",
+            )
+            .order_by(Task.created_at.asc())
+            .all()
+        )
+
+        existing_task_ids = [
+            str(link.task_id)
+            for link in wager.linked_tasks
+            if getattr(link, "task_id", None) is not None
+        ]
+
+        if request.method == "POST":
+            title = request.form.get("title", "").strip()
+            description = request.form.get("description", "").strip()
+            start_date_raw = request.form.get("start_date", "").strip()
+            end_date_raw = request.form.get("end_date", "").strip()
+            stake_amount_raw = request.form.get("stake_amount", "").strip()
+            selected_task_ids = request.form.getlist("tasks")
+
+            error = None
+
+            if not title:
+                error = "Wager Name cannot be empty."
+            elif not description:
+                error = "Description cannot be empty."
+            elif not selected_task_ids:
+                error = "Please select at least one linked task."
+
+            start_date = None
+            end_date = None
+
+            if not error:
+                try:
+                    start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                    if end_date < start_date:
+                        error = "End Date cannot be earlier than Start Date."
+                except ValueError:
+                    error = "Please enter valid start and end dates."
+
+            if not error:
+                try:
+                    stake_amount = int(stake_amount_raw)
+                    if stake_amount <= 0:
+                        error = "Stake Amount must be greater than 0."
+                except ValueError:
+                    error = "Stake Amount must be a valid number."
+
+            selected_tasks = []
+            if not error:
+                try:
+                    selected_task_ids_int = [int(task_id) for task_id in selected_task_ids]
+                except ValueError:
+                    error = "Invalid task selection."
+                    selected_task_ids_int = []
+
+                if not error:
+                    selected_tasks = (
+                        Task.query.filter(Task.id.in_(selected_task_ids_int)).all()
+                    )
+
+                    if len(selected_tasks) != len(selected_task_ids_int):
+                        error = "Some selected tasks do not exist."
+                    elif any(task.team_id != wager.team_id for task in selected_tasks):
+                        error = "Selected tasks must belong to the wager team."
+                    elif any(task.status == "done" for task in selected_tasks):
+                        error = "Completed tasks cannot be linked to a wager."
+
+            if error:
+                return render_template(
+                    "wagers/edit.html",
+                    wager=wager,
+                    teams=teams,
+                    tasks=task_options,
+                    error=error,
+                    form_data={
+                        "title": title,
+                        "description": description,
+                        "start_date": start_date_raw,
+                        "end_date": end_date_raw,
+                        "stake_amount": stake_amount_raw,
+                        "selected_tasks": selected_task_ids,
+                    },
+                )
+
+            wager.title = title
+            wager.description = description
+            wager.start_date = start_date
+            wager.end_date = end_date
+            wager.stake_amount = stake_amount
+
+            WagerTask.query.filter_by(wager_id=wager.id).delete()
+
+            for task in selected_tasks:
+                db.session.add(
+                    WagerTask(
+                        wager_id=wager.id,
+                        task_name=task.title,
+                        task_id=task.id,
+                    )
+                )
+
+            db.session.commit()
+            flash("Wager updated successfully.", "success")
+            return redirect(url_for("wagers_detail"))
+
+        return render_template(
+            "wagers/edit.html",
+            wager=wager,
+            teams=teams,
+            tasks=task_options,
+            error=None,
+            form_data={
+                "title": wager.title,
+                "description": wager.description,
+                "start_date": format_date(wager.start_date),
+                "end_date": format_date(wager.end_date),
+                "stake_amount": wager.stake_amount,
+                "selected_tasks": existing_task_ids,
+            },
+        )
+
+    @app.route("/wagers/<int:wager_id>/delete", methods=["POST"])
+    @login_required
+    def delete_wager(wager_id):
+        wager = db.session.get(Wager, wager_id)
+        if wager is None:
+            flash("Wager not found.", "error")
+            return redirect(url_for("wagers_detail"))
+
+        if wager.creator_id != current_user.id:
+            flash("Only the creator can delete this wager.", "error")
+            return redirect(url_for("wagers_detail"))
+
+        WagerTask.query.filter_by(wager_id=wager.id).delete()
+        WagerParticipant.query.filter_by(wager_id=wager.id).delete()
+        db.session.delete(wager)
+        db.session.commit()
+
+        flash("Wager deleted successfully.", "success")
+        return redirect(url_for("wagers_detail"))
 
     @app.route("/login", methods=["GET", "POST"])
     def login():

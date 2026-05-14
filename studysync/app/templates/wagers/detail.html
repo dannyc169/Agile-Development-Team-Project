@@ -1,197 +1,306 @@
 {% extends "base.html" %}
 
-{% block title %}Wager: {{ wager.title }} - UWA StudySync{% endblock %}
-
+{% block title %}Wagers - UWA StudySync{% endblock %}
 {% block page_title %}Wagers{% endblock %}
 
-{% block content %}
-<div class="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg p-8 mb-8 text-white">
-    <div class="flex items-start justify-between mb-6">
-        <div>
-            <h1 class="text-4xl font-bold mb-2">{{ wager.title }}</h1>
-            <div class="flex items-center gap-4 flex-wrap">
-                <span class="inline-flex items-center gap-2">
-                    <span class="inline-block w-3 h-3 rounded-full bg-green-400 animate-pulse"></span>
-                    <span class="font-semibold">{{ wager.status }}</span>
-                </span>
-                <span class="text-indigo-100 text-sm">
-                    Team: <span class="font-semibold text-white">{{ wager.team }}</span>
-                </span>
+{% macro render_wager_card(item) %}
+{% set wager = item.wager %}
+{% set participants = item.participants %}
+{% set user_status = item.user_status %}
+
+<section class="space-y-6">
+    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl shadow-lg p-8 text-white">
+        <div class="flex items-start justify-between mb-6">
+            <div>
+                <h2 class="text-5xl font-bold mb-3">{{ wager.title }}</h2>
+                <div class="flex items-center gap-4 text-lg">
+                    <span class="inline-flex items-center gap-2 font-semibold">
+                        <span class="w-3 h-3 rounded-full
+                            {% if wager.status_key == 'completed' %}bg-green-400
+                            {% elif wager.status_key == 'failed' %}bg-red-400
+                            {% elif wager.status_key == 'at_risk' %}bg-yellow-300
+                            {% else %}bg-green-400{% endif %}">
+                        </span>
+                        {{ wager.status }}
+                    </span>
+                    <span>Team: {{ wager.team }}</span>
+                </div>
+            </div>
+
+            {% if wager.can_manage %}
+            <div class="flex gap-3">
+                <a href="{{ url_for('edit_wager', wager_id=wager.id) }}"
+                   class="px-4 py-2 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-gray-100 transition">
+                    Edit
+                </a>
+                <form method="POST" action="{{ url_for('delete_wager', wager_id=wager.id) }}"
+                      onsubmit="return confirm('Delete this wager?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit"
+                            class="px-4 py-2 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition">
+                        Delete
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4">
+            <div>
+                <p class="text-sm text-indigo-100 mb-2">Prize Pool</p>
+                <p class="text-4xl font-bold">💎 {{ wager.prize_pool }} pts</p>
+            </div>
+            <div>
+                <p class="text-sm text-indigo-100 mb-2">Time Remaining</p>
+                <p class="text-4xl font-bold">⏰ {{ wager.time_remaining }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-indigo-100 mb-2">Participants On Track</p>
+                <p class="text-4xl font-bold">{{ wager.participants_on_track }}/{{ wager.total_participants }}</p>
             </div>
         </div>
 
+        <div class="w-full h-3 bg-indigo-800/50 rounded-full overflow-hidden">
+            <div class="h-full bg-green-400 rounded-full"
+                 style="width: {{ wager.overall_progress }}%;"></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-8">
+            <div class="bg-white rounded-2xl shadow p-8">
+                <h3 class="text-3xl font-bold text-gray-900 mb-8">📋 Contract Terms</h3>
+
+                <div class="space-y-6 text-lg">
+                    <div>
+                        <p class="font-semibold text-gray-900 mb-2">Goal</p>
+                        <p class="text-gray-700">{{ wager.goal }}</p>
+                    </div>
+
+                    <div>
+                        <p class="font-semibold text-gray-900 mb-2">Team</p>
+                        <p class="text-gray-700">{{ wager.team }}</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <p class="font-semibold text-gray-900 mb-2">Start Date</p>
+                            <p class="text-gray-700">{{ wager.start_date }}</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-900 mb-2">End Date</p>
+                            <p class="text-gray-700">{{ wager.end_date }}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="font-semibold text-gray-900 mb-2">Stake Amount per Person</p>
+                        <p class="text-4xl font-bold text-indigo-600">{{ wager.stake_amount }} pts</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200 space-y-4">
+                        <div>
+                            <p class="font-semibold text-gray-900 mb-2">📉 Penalty Rule</p>
+                            <div class="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded">
+                                {{ wager.penalty_rule }}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p class="font-semibold text-gray-900 mb-2">🎁 Reward Rule</p>
+                            <div class="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded">
+                                {{ wager.reward_rule }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200">
+                        <p class="font-semibold text-gray-900">
+                            Created by:
+                            <span class="text-indigo-600">{{ wager.created_by }}</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow p-8">
+                <h3 class="text-3xl font-bold text-gray-900 mb-8">👥 Participant Status</h3>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="pb-4 text-lg font-semibold text-gray-900">Participant</th>
+                                <th class="pb-4 text-lg font-semibold text-gray-900">Tasks Done</th>
+                                <th class="pb-4 text-lg font-semibold text-gray-900">Progress</th>
+                                <th class="pb-4 text-lg font-semibold text-gray-900">Status</th>
+                                <th class="pb-4 text-lg font-semibold text-gray-900">Est. Reward</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for participant in participants %}
+                            <tr class="{{ participant.row_class }}">
+                                <td class="py-5">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full text-white flex items-center justify-center font-bold {{ participant.avatar_color }}">
+                                            {{ participant.avatar }}
+                                        </div>
+                                        <span class="text-lg {{ participant.name_class }}">{{ participant.name }}</span>
+                                    </div>
+                                </td>
+                                <td class="py-5 text-lg {{ participant.done_class }}">
+                                    {{ participant.tasks_done }}/{{ participant.tasks_total }}
+                                </td>
+                                <td class="py-5">
+                                    <div class="w-28 h-3 bg-gray-200 rounded-full overflow-hidden">
+                                        <div class="h-full rounded-full {{ participant.progress_class }}"
+                                             style="width: {{ participant.progress }}%;"></div>
+                                    </div>
+                                </td>
+                                <td class="py-5">
+                                    <span class="px-3 py-1 rounded-lg text-sm font-semibold {{ participant.status_class }}">
+                                        {{ participant.status }}
+                                    </span>
+                                </td>
+                                <td class="py-5 text-lg font-semibold">
+                                    {{ participant.reward }} pts
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="bg-white rounded-2xl shadow p-8 border-2 border-indigo-500">
+                <h3 class="text-3xl font-bold text-gray-900 mb-8">Your Status</h3>
+
+                <div class="flex justify-center mb-8">
+                    <div class="relative w-36 h-36">
+                        <svg class="w-36 h-36 transform -rotate-90">
+                            <circle cx="72" cy="72" r="56" stroke="#E5E7EB" stroke-width="10" fill="none"></circle>
+                            {% set percent = 0 %}
+                            {% if user_status.tasks_total > 0 %}
+                                {% set percent = (user_status.tasks_done / user_status.tasks_total * 100)|int %}
+                            {% endif %}
+                            {% set circumference = 351.86 %}
+                            {% set offset = circumference - (circumference * percent / 100) %}
+                            <circle cx="72"
+                                    cy="72"
+                                    r="56"
+                                    stroke="#4F46E5"
+                                    stroke-width="10"
+                                    fill="none"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="{{ circumference }}"
+                                    stroke-dashoffset="{{ offset }}"></circle>
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="text-3xl font-bold text-indigo-600">
+                                {{ user_status.tasks_done }}/{{ user_status.tasks_total }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mb-8">
+                    <p class="text-2xl font-bold {{ user_status.status_color }}">
+                        {{ user_status.status_text }}
+                    </p>
+                    <p class="text-gray-600 mt-3 text-lg">{{ user_status.status_subtext }}</p>
+                </div>
+
+                <div class="bg-indigo-50 rounded-xl p-6 mb-8">
+                    <div class="mb-6">
+                        <p class="text-gray-600 mb-2">Your Stake (Frozen)</p>
+                        <p class="text-4xl font-bold text-indigo-600">{{ user_status.stake_frozen }} pts</p>
+                    </div>
+                    <div class="border-t border-indigo-200 pt-4">
+                        <p class="text-gray-600 mb-2">Potential Reward</p>
+                        <p class="text-4xl font-bold text-green-600">+{{ user_status.potential_reward }} pts</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-2xl font-bold text-gray-900 mb-4">Your Required Tasks:</h4>
+                    <div class="space-y-3">
+                        {% if user_status.required_tasks %}
+                            {% for task in user_status.required_tasks %}
+                            <label class="flex items-center gap-3">
+                                <input type="checkbox"
+                                       {% if task.done %}checked{% endif %}
+                                       disabled
+                                       class="w-4 h-4 text-indigo-600 rounded">
+                                <span class="text-lg text-gray-700">
+                                    {% if task.done %}✅ {% endif %}{{ task.title }}
+                                </span>
+                            </label>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-sm text-gray-500">No linked tasks.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endmacro %}
+
+{% block content %}
+<div class="space-y-10">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Wagers</h1>
+            <p class="text-gray-500 mt-1">Manage your active, completed, and failed wagers.</p>
+        </div>
         <a href="{{ url_for('create_wager') }}"
-           class="px-4 py-2 bg-white text-indigo-700 rounded-lg font-semibold hover:bg-indigo-50 transition">
+           class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
             + Create Wager
         </a>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div>
-            <p class="text-indigo-100 text-sm mb-1">Prize Pool</p>
-            <p class="text-3xl font-bold">💎 {{ wager.prize_pool }} pts</p>
-        </div>
-        <div>
-            <p class="text-indigo-100 text-sm mb-1">Time Remaining</p>
-            <p class="text-3xl font-bold">⏱ {{ wager.time_remaining }}</p>
-        </div>
-        <div>
-            <p class="text-indigo-100 text-sm mb-1">Participants On Track</p>
-            <p class="text-3xl font-bold">{{ wager.participants_on_track }}/{{ wager.total_participants }}</p>
-        </div>
-    </div>
-
-    <div class="w-full bg-indigo-800 rounded-full h-2">
-        <div class="bg-green-400 h-2 rounded-full" style="width: {{ wager.overall_progress }}%"></div>
-    </div>
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <div class="lg:col-span-2 space-y-6">
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold text-gray-900 mb-4">📋 Contract Terms</h2>
-
-            <div class="space-y-4 text-sm text-gray-700">
-                <div>
-                    <p class="font-semibold text-gray-900 mb-2">Goal</p>
-                    <p>{{ wager.goal }}</p>
+    <div class="space-y-10">
+        <section class="space-y-6">
+            <h2 class="text-2xl font-bold text-gray-900">Active Wagers</h2>
+            {% if sections.active %}
+                {% for item in sections.active %}
+                    {{ render_wager_card(item) }}
+                {% endfor %}
+            {% else %}
+                <div class="bg-white rounded-xl shadow p-6 text-gray-500">
+                    No active wagers.
                 </div>
+            {% endif %}
+        </section>
 
-                <div>
-                    <p class="font-semibold text-gray-900 mb-1">Team</p>
-                    <p>{{ wager.team }}</p>
+        <section class="space-y-6">
+            <h2 class="text-2xl font-bold text-gray-900">Completed Wagers</h2>
+            {% if sections.completed %}
+                {% for item in sections.completed %}
+                    {{ render_wager_card(item) }}
+                {% endfor %}
+            {% else %}
+                <div class="bg-white rounded-xl shadow p-6 text-gray-500">
+                    No completed wagers.
                 </div>
+            {% endif %}
+        </section>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <p class="font-semibold text-gray-900 mb-1">Start Date</p>
-                        <p>{{ wager.start_date }}</p>
-                    </div>
-                    <div>
-                        <p class="font-semibold text-gray-900 mb-1">End Date</p>
-                        <p>{{ wager.end_date }}</p>
-                    </div>
+        <section class="space-y-6">
+            <h2 class="text-2xl font-bold text-gray-900">Failed Wagers</h2>
+            {% if sections.failed %}
+                {% for item in sections.failed %}
+                    {{ render_wager_card(item) }}
+                {% endfor %}
+            {% else %}
+                <div class="bg-white rounded-xl shadow p-6 text-gray-500">
+                    No failed wagers.
                 </div>
-
-                <div>
-                    <p class="font-semibold text-gray-900 mb-1">Stake Amount per Person</p>
-                    <p class="text-lg font-bold text-indigo-600">{{ wager.stake_amount }} pts</p>
-                </div>
-
-                <div class="border-t border-gray-200 pt-4">
-                    <p class="font-semibold text-gray-900 mb-2">📉 Penalty Rule</p>
-                    <p class="bg-red-50 border-l-4 border-red-500 px-4 py-2 rounded">
-                        {{ wager.penalty_rule }}
-                    </p>
-                </div>
-
-                <div>
-                    <p class="font-semibold text-gray-900 mb-2">🎁 Reward Rule</p>
-                    <p class="bg-green-50 border-l-4 border-green-500 px-4 py-2 rounded">
-                        {{ wager.reward_rule }}
-                    </p>
-                </div>
-
-                <div class="border-t border-gray-200 pt-4">
-                    <p class="text-gray-600">
-                        <span class="font-semibold">Created by:</span>
-                        <span class="font-semibold text-indigo-600">{{ wager.created_by }}</span>
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold text-gray-900 mb-4">👥 Participant Status</h2>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-gray-200">
-                            <th class="text-left font-semibold text-gray-700 pb-3">Participant</th>
-                            <th class="text-left font-semibold text-gray-700 pb-3">Tasks Done</th>
-                            <th class="text-left font-semibold text-gray-700 pb-3">Progress</th>
-                            <th class="text-left font-semibold text-gray-700 pb-3">Status</th>
-                            <th class="text-right font-semibold text-gray-700 pb-3">Est. Reward</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in participants %}
-                        <tr class="border-b border-gray-100 hover:bg-gray-50 {{ p.row_class }}">
-                            <td class="py-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full {{ p.avatar_color }} flex items-center justify-center text-white text-xs font-bold">
-                                        {{ p.avatar }}
-                                    </div>
-                                    <span class="font-medium {{ p.name_class }}">{{ p.name }}</span>
-                                </div>
-                            </td>
-                            <td class="py-3 {{ p.done_class }}">{{ p.tasks_done }}/{{ p.tasks_total }}</td>
-                            <td class="py-3">
-                                <div class="w-24 bg-gray-200 rounded-full h-2">
-                                    <div class="{{ p.progress_class }} h-2 rounded-full" style="width: {{ p.progress }}%"></div>
-                                </div>
-                            </td>
-                            <td class="py-3">
-                                <span class="inline-block {{ p.status_class }} px-2 py-1 rounded text-xs font-semibold">
-                                    {{ p.status }}
-                                </span>
-                            </td>
-                            <td class="py-3 text-right font-bold text-gray-900">{{ p.reward }} pts</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="lg:col-span-1 space-y-6">
-        <div class="bg-white rounded-lg shadow p-6 border-2 border-indigo-500">
-            <h2 class="text-lg font-bold text-gray-900 mb-4">Your Status</h2>
-
-            <div class="flex justify-center mb-6">
-                <svg class="w-32 h-32" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#E5E7EB" stroke-width="8"></circle>
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#4F46E5" stroke-width="8"
-                            stroke-dasharray="170 250" stroke-linecap="round"
-                            transform="rotate(-90 50 50)"></circle>
-                    <text x="50" y="50" text-anchor="middle" dy="0.3em" font-size="28" font-weight="bold" fill="#4F46E5">
-                        {{ user_status.tasks_done }}/{{ user_status.tasks_total }}
-                    </text>
-                </svg>
-            </div>
-
-            <div class="text-center mb-6">
-                <p class="text-lg font-semibold {{ user_status.status_color }} mb-1">{{ user_status.status_text }}</p>
-                <p class="text-sm text-gray-600">{{ user_status.status_subtext }}</p>
-            </div>
-
-            <div class="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-lg p-4 mb-6 space-y-3">
-                <div>
-                    <p class="text-xs text-gray-600 mb-1">Your Stake (Frozen)</p>
-                    <p class="text-2xl font-bold text-indigo-600">{{ user_status.stake_frozen }} pts</p>
-                </div>
-                <div class="border-t border-indigo-300 pt-3">
-                    <p class="text-xs text-gray-600 mb-1">Potential Reward</p>
-                    <p class="text-2xl font-bold text-green-600">+{{ user_status.potential_reward }} pts</p>
-                </div>
-            </div>
-
-            <div>
-                <p class="font-semibold text-gray-900 text-sm mb-3">Your Required Tasks:</p>
-                <div class="space-y-2">
-                    {% for task in user_status.required_tasks %}
-                    <label class="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" {% if task.done %}checked{% endif %} class="w-4 h-4 text-indigo-600 rounded">
-                        <span class="text-sm text-gray-700">
-                            {% if task.done %}✅ {% endif %}{{ task.title }}
-                        </span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+            {% endif %}
+        </section>
     </div>
 </div>
 {% endblock %}
