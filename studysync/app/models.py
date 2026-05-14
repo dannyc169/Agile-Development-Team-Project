@@ -255,7 +255,12 @@ class WagerTask(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+
+    # old data compatibility
+    task_name = db.Column(db.String(120), nullable=True)
+
+    # new linkage
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
 
     wager = db.relationship("Wager", back_populates="linked_tasks")
     task = db.relationship("Task", backref=db.backref("wager_links", lazy=True))
