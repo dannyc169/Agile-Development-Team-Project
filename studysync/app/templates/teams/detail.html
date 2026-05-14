@@ -28,7 +28,7 @@
                 </p>
 
                 <div class="flex flex-wrap gap-4 text-sm text-gray-700">
-                    <span><strong>{{ member_count }}</strong> members</span>
+                    <span><strong>{{ member_count }}</strong>/{{ max_team_members }} members</span>
                     <span>Created {{ team.created_at.strftime('%Y-%m-%d') }}</span>
 
                     {% if leader_username %}
@@ -86,9 +86,15 @@
     <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-bold text-gray-900">Team Members</h2>
-            <span class="text-sm text-gray-500">{{ member_count }} total</span>
+            <span class="text-sm text-gray-500">{{ member_count }}/{{ max_team_members }} total</span>
         </div>
-    
+
+        {% if member_count >= max_team_members %}
+            <p class="text-sm text-orange-600 mb-4">
+                This team is full. New members cannot join with the invite code.
+            </p>
+        {% endif %}
+        
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {% for row in member_rows %}
                 <div class="rounded-xl border border-gray-200 p-4">
