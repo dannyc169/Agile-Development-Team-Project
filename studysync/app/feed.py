@@ -5,7 +5,12 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app import db
-from app.models import Activity, ActivityLike, TeamMember, Task, User, Wager, WagerParticipant
+from app.models import Activity, ActivityLike, TeamMember, Task, User, Wager
+from app.wager_helpers import (
+    calculate_total_points,
+    calculate_wager_progress,
+    sync_wagers,
+)
 
 
 feed_bp = Blueprint("feed", __name__)
@@ -27,105 +32,16 @@ def _can_view_activity(activity, team_ids):
     return activity.team_id in team_ids
 
 
-def _resolve_linked_task_for_user(link, wager, user_id):
-    """
-    Resolve a wager linked task for a user.
-    Supports both new data (task_id) and old compatibility data (task_name).
-    """
-    if getattr(link, "task", None) is not None:
-        if link.task.user_id == user_id:
-            return link.task
-        return None
+def _sync_visible_wagers(team_ids):
+    """Sync wagers that belong to teams visible to the current user."""
+    if not team_ids:
+        return
 
-    if getattr(link, "task_name", None):
-        return (
-            Task.query.filter_by(
-                user_id=user_id,
-                team_id=wager.team_id,
-                title=link.task_name,
-            )
-            .order_by(Task.created_at.desc())
-            .first()
-        )
-
-    return None
-
-
-def _count_done_tasks_for_user(wager, user_id):
-    done_count = 0
-
-    for link in wager.linked_tasks:
-        linked_task = _resolve_linked_task_for_user(link, wager, user_id)
-        if linked_task is not None and linked_task.status == "done":
-            done_count += 1
-
-    return done_count
-
-
-def _count_wagers_won_for_user(user_id):
-    wagers = (
-        Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-        .filter(TeamMember.user_id == user_id)
-        .all()
-    )
-
-    won_count = 0
-
-    for wager in wagers:
-        participant = WagerParticipant.query.filter_by(
-            wager_id=wager.id,
-            user_id=user_id,
-        ).first()
-
-        if not participant:
-            continue
-
-        total_tasks = len(wager.linked_tasks)
-        done_count = _count_done_tasks_for_user(wager, user_id)
-
-        if total_tasks > 0 and done_count >= total_tasks:
-            won_count += 1
-
-    return won_count
-
-
-def _calculate_total_points(user_id):
-    """
-    Points come from completed wagers.
-    Each completed wager contributes its configured stake_amount.
-    """
-    wagers = (
-        Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-        .filter(TeamMember.user_id == user_id)
-        .all()
-    )
-
-    total_points = 0
-
-    for wager in wagers:
-        participant = WagerParticipant.query.filter_by(
-            wager_id=wager.id,
-            user_id=user_id,
-        ).first()
-
-        if not participant:
-            continue
-
-        total_tasks = len(wager.linked_tasks)
-        done_count = _count_done_tasks_for_user(wager, user_id)
-
-        if total_tasks > 0 and done_count >= total_tasks:
-            total_points += wager.stake_amount
-
-    return total_points
+    wagers = Wager.query.filter(Wager.team_id.in_(team_ids)).all()
+    sync_wagers(wagers)
 
 
 def _build_active_wager_cards(team_ids):
-    """
-    Build a small list of real wager cards for the right sidebar.
-    Keep this lightweight and independent so it does not affect
-    the existing activity feed behaviour.
-    """
     if not team_ids:
         return []
 
@@ -143,16 +59,10 @@ def _build_active_wager_cards(team_ids):
         if wager.end_date and wager.end_date < today:
             continue
 
-        total_tasks = len(wager.linked_tasks)
+        total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
         total_participants = len(wager.participants)
 
-        completed_participants = 0
-        for participant in wager.participants:
-            done_count = _count_done_tasks_for_user(wager, participant.user_id)
-            if total_tasks > 0 and done_count >= total_tasks:
-                completed_participants += 1
-
-        if total_participants > 0 and completed_participants == total_participants:
+        if total_tasks > 0 and done_tasks >= total_tasks:
             continue
 
         if wager.end_date:
@@ -161,7 +71,7 @@ def _build_active_wager_cards(team_ids):
         else:
             time_remaining = "No deadline"
 
-        prize_pool = wager.stake_amount * max(len(wager.participants), 1)
+        prize_pool = wager.stake_amount * max(total_participants, 1)
 
         theme_options = [
             {
@@ -177,6 +87,7 @@ def _build_active_wager_cards(team_ids):
                 "badge_class": "bg-orange-500 text-white",
             },
         ]
+
         theme = theme_options[index % len(theme_options)]
 
         active_wagers.append(
@@ -193,13 +104,22 @@ def _build_active_wager_cards(team_ids):
     return active_wagers[:3]
 
 
-def _build_leaderboard():
-    """
-    Build a simple leaderboard based on:
-    - completed wager points total
-    - completed task count
-    """
-    users = User.query.order_by(User.username.asc()).all()
+def _build_leaderboard(team_ids):
+    if not team_ids:
+        return []
+
+    member_rows = TeamMember.query.filter(TeamMember.team_id.in_(team_ids)).all()
+    user_ids = sorted(set(row.user_id for row in member_rows))
+
+    if not user_ids:
+        return []
+
+    users = (
+        User.query.filter(User.id.in_(user_ids))
+        .order_by(User.username.asc())
+        .all()
+    )
+
     leaderboard = []
 
     avatar_colors = [
@@ -212,8 +132,13 @@ def _build_leaderboard():
     ]
 
     for user in users:
-        completed_task_count = Task.query.filter_by(user_id=user.id, status="done").count()
-        points = _calculate_total_points(user.id)
+        completed_task_count = Task.query.filter(
+            Task.user_id == user.id,
+            Task.status == "done",
+            Task.team_id.in_(team_ids),
+        ).count()
+
+        points = calculate_total_points(user.id, team_ids)
 
         leaderboard.append(
             {
@@ -227,7 +152,11 @@ def _build_leaderboard():
         )
 
     leaderboard.sort(
-        key=lambda item: (-item["points"], -item["completed_task_count"], item["name"].lower())
+        key=lambda item: (
+            -item["points"],
+            -item["completed_task_count"],
+            item["name"].lower(),
+        )
     )
 
     for index, item in enumerate(leaderboard):
@@ -256,6 +185,7 @@ def activity_feed():
         active_filter = "all"
 
     team_ids = _current_user_team_ids()
+    _sync_visible_wagers(team_ids)
 
     activity_query = Activity.query.order_by(Activity.created_at.desc())
 
@@ -303,7 +233,7 @@ def activity_feed():
     }
 
     active_wagers = _build_active_wager_cards(team_ids)
-    leaderboard = _build_leaderboard()
+    leaderboard = _build_leaderboard(team_ids)
 
     return render_template(
         "feed/index.html",
@@ -323,10 +253,12 @@ def toggle_activity_like(activity_id):
     activity = Activity.query.get_or_404(activity_id)
 
     team_ids = _current_user_team_ids()
+
     if not _can_view_activity(activity, team_ids):
         abort(403)
 
     active_filter = request.form.get("filter", "all")
+
     if active_filter not in ("all", "my-teams"):
         active_filter = "all"
 
