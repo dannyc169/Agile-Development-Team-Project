@@ -66,12 +66,10 @@
                             Create wager
                         </a>
 
-                        <!-- Disabled for now because task creation is currently handled by the My Tasks page -->
-                        <button type="button"
-                                class="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold opacity-80 cursor-not-allowed"
-                                disabled>
+                        <a href="{{ url_for('tasks.task_list', open_create=1, team_id=team.id) }}"
+                           class="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800 transition">
                             Assign task
-                        </button>
+                        </a>
                     </div>
                 {% endif %}
             </div>
