@@ -282,7 +282,8 @@ def add_comment(activity_id):
     if not _can_view_activity(activity, team_ids):
         abort(403)
 
-    if len(activity.comments) >= 50:
+    comment_count = ActivityComment.query.filter_by(activity_id=activity.id).count()
+    if comment_count >= 50:
         flash("Comment limit of 50 reached.", "error")
         active_filter = request.form.get("filter", "all")
         return redirect(url_for("feed.activity_feed", filter=active_filter))
@@ -307,8 +308,18 @@ def add_comment(activity_id):
 @feed_bp.route("/feed/<int:activity_id>/comments/<int:comment_id>/delete", methods=["POST"])
 @login_required
 def delete_comment(activity_id, comment_id):
-    comment = ActivityComment.query.get_or_404(comment_id)
-    if comment.activity_id != activity_id or comment.user_id != current_user.id:
+    activity = Activity.query.get_or_404(activity_id)
+
+    team_ids = _current_user_team_ids()
+    if not _can_view_activity(activity, team_ids):
+        abort(403)
+
+    comment = ActivityComment.query.filter_by(
+        id=comment_id,
+        activity_id=activity.id,
+    ).first_or_404()
+
+    if comment.user_id != current_user.id:
         abort(403)
 
     db.session.delete(comment)

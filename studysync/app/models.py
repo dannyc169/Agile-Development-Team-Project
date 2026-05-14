@@ -145,7 +145,12 @@ class ActivityComment(db.Model):
 
     activity = db.relationship(
         "Activity",
-        backref=db.backref("comments", lazy=True, cascade="all, delete-orphan"),
+        backref=db.backref(
+            "comments",
+            lazy=True,
+            cascade="all, delete-orphan",
+            order_by="ActivityComment.created_at.asc()",
+        ),
     )
     user = db.relationship("User", backref=db.backref("activity_comments", lazy=True))
 
