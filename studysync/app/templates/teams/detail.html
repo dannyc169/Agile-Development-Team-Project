@@ -238,7 +238,7 @@
 
                             <div class="flex flex-wrap gap-2 mt-3 text-xs text-gray-600">
                                 <span class="bg-gray-100 rounded-full px-2 py-1">
-                                    Assignee: {{ task.user.username }}
+                                    Assignee: {{ task.assigned_to_user.username if task.assigned_to_user else task.user.username }}
                                 </span>
 
                                 {% if task.due_date %}
@@ -326,7 +326,7 @@
 
                             <div class="flex flex-wrap gap-2 mt-3 text-xs text-gray-600">
                                 <span class="bg-gray-100 rounded-full px-2 py-1">
-                                    Assignee: {{ task.user.username }}
+                                    Assignee: {{ task.assigned_to_user.username if task.assigned_to_user else task.user.username }}
                                 </span>
 
                                 {% if task.due_date %}
@@ -406,7 +406,7 @@
 
                             <div class="flex flex-wrap gap-2 mt-3 text-xs text-gray-600">
                                 <span class="bg-gray-100 rounded-full px-2 py-1">
-                                    Assignee: {{ task.user.username }}
+                                    Assignee: {{ task.assigned_to_user.username if task.assigned_to_user else task.user.username }}
                                 </span>
 
                                 {% if task.due_date %}
