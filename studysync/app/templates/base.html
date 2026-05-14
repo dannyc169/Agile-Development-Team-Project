@@ -122,7 +122,6 @@
             opacity: 1;
         }
         
-        /* Mobile responsive styles */
         .mobile-nav {
             display: none;
         }
@@ -192,18 +191,14 @@
     {% endwith %}
 
     {% if current_user.is_authenticated %}
-        <!-- Sidebar Overlay for Mobile -->
         <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-        <!-- Left Sidebar Navigation -->
         <aside class="sidebar fixed left-0 top-0 h-full w-60 overflow-y-auto z-50">
-            <!-- Logo Section -->
             <div class="p-6 border-b border-gray-200 flex items-center gap-2">
                 <i class="fas fa-bolt text-2xl" style="color: var(--primary-color);"></i>
                 <h1 class="text-xl font-bold" style="color: var(--primary-color);">StudySync</h1>
             </div>
 
-            <!-- Navigation Links -->
             <nav class="p-4">
                 <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" onclick="setActiveNav(this)">
                     <i class="fas fa-house" style="width: 1.25rem;"></i>
@@ -227,7 +222,6 @@
                 </a>
             </nav>
 
-            <!-- User Section at Bottom -->
             <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-white">
                 <button
                     type="button"
@@ -246,17 +240,13 @@
             </div>
         </aside>
 
-        <!-- Main Content Area -->
         <div class="main-content ml-60">
-            <!-- Top Bar -->
             <div class="topbar sticky top-0 z-40">
                 <div class="flex items-center justify-between px-8 py-4">
-                    <!-- Left: Page Title -->
                     <h2 class="text-2xl font-bold text-gray-900">
                         {% block page_title %}Dashboard{% endblock %}
                     </h2>
 
-                    <!-- Right: Notifications and User Info -->
                     <div class="flex items-center gap-6">
                         <button class="relative text-gray-600 hover:text-gray-900 transition-colors" aria-label="Notifications">
                             <i class="fas fa-bell text-xl"></i>
@@ -265,7 +255,7 @@
 
                         <div class="notification-badge">
                             <i class="fas fa-gem"></i>
-                            <span>1200 pts</span>
+                            <span>{{ "{:,}".format(current_points) }} pts</span>
                         </div>
 
                         <button class="md:hidden text-gray-600 hover:text-gray-900" id="mobileMenuBtn" onclick="toggleSidebar()">
@@ -275,7 +265,6 @@
                 </div>
             </div>
 
-            <!-- Main Content -->
             <main class="p-8">
                 {% block content %}
                     <div class="bg-gray-50 rounded-lg p-8 text-center">
@@ -287,14 +276,12 @@
             </main>
         </div>
 
-        <!-- User Info Modal Overlay -->
         <div
             id="userModalOverlay"
             class="hidden fixed inset-0 bg-black/45 z-[70]"
             aria-hidden="true"
         ></div>
 
-        <!-- User Info Modal -->
         <div
             id="userModal"
             class="hidden fixed left-4 bottom-24 w-[22rem] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl z-[80]"
@@ -338,7 +325,6 @@
             </div>
         </div>
 
-        <!-- Scripts -->
         <script>
             function setActiveNav(element) {
                 document.querySelectorAll('.nav-link').forEach(link => {
