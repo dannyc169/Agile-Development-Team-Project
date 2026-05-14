@@ -134,6 +134,22 @@ class Activity(db.Model):
     task = db.relationship("Task", backref=db.backref("activities", lazy=True))
 
 
+class ActivityComment(db.Model):
+    __tablename__ = "activity_comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    body = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    activity = db.relationship(
+        "Activity",
+        backref=db.backref("comments", lazy=True, cascade="all, delete-orphan"),
+    )
+    user = db.relationship("User", backref=db.backref("activity_comments", lazy=True))
+
+
 class ActivityLike(db.Model):
     __tablename__ = "activity_likes"
     __table_args__ = (

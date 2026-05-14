@@ -102,29 +102,72 @@
                     </div>
         
                     <!-- Reactions -->
-                    <div class="flex items-center gap-4 py-3 border-t border-b border-gray-200">
-                        <form method="POST" action="{{ url_for('feed.toggle_activity_like', activity_id=activity.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="filter" value="{{ active_filter }}">
-                    
-                            <button type="submit"
-                                    class="flex items-center gap-2 text-sm transition
-                                    {% if activity.id in liked_activity_ids %}
-                                        text-indigo-600 font-semibold
-                                    {% else %}
-                                        text-gray-600 hover:text-indigo-600
-                                    {% endif %}">
-                                <i class="{% if activity.id in liked_activity_ids %}fas{% else %}far{% endif %} fa-thumbs-up"></i>
-                                <span>{{ like_counts.get(activity.id, 0) }}</span>
+                    <div class="reaction-section py-3 border-t border-b border-gray-200">
+                        <div class="flex items-center gap-4">
+                            <form method="POST" action="{{ url_for('feed.toggle_activity_like', activity_id=activity.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="filter" value="{{ active_filter }}">
+
+                                <button type="submit"
+                                        class="flex items-center gap-2 text-sm transition
+                                        {% if activity.id in liked_activity_ids %}
+                                            text-indigo-600 font-semibold
+                                        {% else %}
+                                            text-gray-600 hover:text-indigo-600
+                                        {% endif %}">
+                                    <i class="{% if activity.id in liked_activity_ids %}fas{% else %}far{% endif %} fa-thumbs-up"></i>
+                                    <span>{{ like_counts.get(activity.id, 0) }}</span>
+                                </button>
+                            </form>
+
+                            <button type="button"
+                                    onclick="this.closest('.reaction-section').querySelector('.comment-section').classList.toggle('hidden')"
+                                    class="flex items-center gap-2 text-gray-600 hover:text-indigo-600 text-sm transition">
+                                <i class="far fa-comment"></i>
+                                <span>{{ activity.comments|length }} comment{{ 's' if activity.comments|length != 1 else '' }}</span>
                             </button>
-                        </form>
-                    
-                        <button type="button"
-                                class="flex items-center gap-2 text-gray-400 text-sm cursor-not-allowed"
-                                disabled>
-                            <i class="far fa-comment"></i>
-                            <span>Comments later</span>
-                        </button>
+                        </div>
+
+                        <!-- Comment Section (collapsed by default) -->
+                        <div class="comment-section hidden mt-3 space-y-2">
+                            {% for comment in activity.comments %}
+                            <div class="flex items-start gap-2 text-sm">
+                                <div class="w-7 h-7 rounded-full bg-indigo-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                    {{ comment.user.username[:1]|upper }}
+                                </div>
+                                <div class="flex-1 bg-gray-50 rounded-lg px-3 py-2">
+                                    <span class="font-semibold text-gray-900">{{ comment.user.username }}</span>
+                                    <span class="text-gray-600 ml-1">{{ comment.body }}</span>
+                                    <span class="text-gray-400 text-xs ml-2">{{ comment.created_at.strftime('%b %d %H:%M') }}</span>
+                                </div>
+                                {% if comment.user_id == current_user.id %}
+                                <form method="POST" action="{{ url_for('feed.delete_comment', activity_id=activity.id, comment_id=comment.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="filter" value="{{ active_filter }}">
+                                    <button type="submit" class="text-gray-400 hover:text-red-500 text-xs mt-2">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+
+                            {% if activity.comments|length < 50 %}
+                            <form method="POST" action="{{ url_for('feed.add_comment', activity_id=activity.id) }}" class="flex gap-2 pt-1">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="filter" value="{{ active_filter }}">
+                                <input type="text" name="body" maxlength="500" placeholder="Write a comment..."
+                                       class="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-400"
+                                       required>
+                                <button type="submit"
+                                        class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition">
+                                    Post
+                                </button>
+                            </form>
+                            {% else %}
+                            <p class="text-xs text-gray-400 pt-1">Comment limit reached (50/50).</p>
+                            {% endif %}
+                        </div>
                     </div>                                
                 </div>
             {% else %}
