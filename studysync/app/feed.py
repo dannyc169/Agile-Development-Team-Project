@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import and_, or_
 
 from app import db
-from app.models import Activity, ActivityComment, ActivityLike, TeamMember, Task, User, Wager
+from app.models import Activity, ActivityComment, ActivityLike, Team, TeamMember, Task, User, Wager
 from app.wager_helpers import (
     calculate_total_points,
     calculate_wager_progress,
@@ -23,12 +23,31 @@ def _current_user_team_ids():
     ]
 
 
+def _current_user_teams():
+    """Return teams that the current user belongs to, ordered by name."""
+    memberships = (
+        TeamMember.query.join(Team, Team.id == TeamMember.team_id)
+        .filter(TeamMember.user_id == current_user.id)
+        .order_by(Team.name.asc())
+        .all()
+    )
+    return [membership.team for membership in memberships]
+    
+
 def _can_view_activity(activity, team_ids):
     """Return whether the current user is allowed to view this activity."""
     if activity.team_id is None:
         return True
 
     return activity.team_id in team_ids
+
+
+def _selected_team_redirect_args():
+    """Preserve the selected team after like/comment actions."""
+    selected_team_id = request.form.get("team_id", type=int)
+    if selected_team_id:
+        return {"team_id": selected_team_id}
+    return {}
 
 
 def _build_active_wager_cards(team_ids):
@@ -174,42 +193,29 @@ def _build_leaderboard(team_ids):
 @feed_bp.route("/feed")
 @login_required
 def activity_feed():
-    """Render the Activity Feed page with visibility-aware filtering."""
-    active_filter = request.args.get("filter", "all")
+    """Render the Activity Feed page for the selected team."""
+    user_teams = _current_user_teams()
+    team_ids = [team.id for team in user_teams]
 
-    if active_filter not in ("all", "my-teams"):
-        active_filter = "all"
+    selected_team_id = request.args.get("team_id", type=int)
 
-    team_ids = _current_user_team_ids()
+    if team_ids:
+        if selected_team_id not in team_ids:
+            selected_team_id = team_ids[0]
 
-    activity_query = Activity.query.order_by(Activity.created_at.desc())
+        selected_team_ids = [selected_team_id]
 
-    if active_filter == "my-teams":
-        if team_ids:
-            activity_query = activity_query.filter(Activity.team_id.in_(team_ids))
-        else:
-            activities = []
-            return render_template(
-                "feed/index.html",
-                activities=activities,
-                active_filter=active_filter,
-                liked_activity_ids=set(),
-                like_counts={},
-                active_wagers=[],
-                leaderboard=[],
-            )
+        activities = (
+            Activity.query.filter(Activity.team_id == selected_team_id)
+            .order_by(Activity.created_at.desc())
+            .limit(50)
+            .all()
+        )
     else:
-        if team_ids:
-            activity_query = activity_query.filter(
-                or_(
-                    Activity.team_id.is_(None),
-                    Activity.team_id.in_(team_ids),
-                )
-            )
-        else:
-            activity_query = activity_query.filter(Activity.team_id.is_(None))
+        selected_team_id = None
+        selected_team_ids = []
+        activities = []
 
-    activities = activity_query.limit(50).all()
     activity_ids = [activity.id for activity in activities]
 
     liked_activity_ids = set()
@@ -227,13 +233,14 @@ def activity_feed():
         for activity in activities
     }
 
-    active_wagers = _build_active_wager_cards(team_ids)
-    leaderboard = _build_leaderboard(team_ids)
+    active_wagers = _build_active_wager_cards(selected_team_ids)
+    leaderboard = _build_leaderboard(selected_team_ids)
 
     return render_template(
         "feed/index.html",
         activities=activities,
-        active_filter=active_filter,
+        user_teams=user_teams,
+        selected_team_id=selected_team_id,
         liked_activity_ids=liked_activity_ids,
         like_counts=like_counts,
         active_wagers=active_wagers,
@@ -251,11 +258,6 @@ def toggle_activity_like(activity_id):
 
     if not _can_view_activity(activity, team_ids):
         abort(403)
-
-    active_filter = request.form.get("filter", "all")
-
-    if active_filter not in ("all", "my-teams"):
-        active_filter = "all"
 
     existing_like = ActivityLike.query.filter_by(
         activity_id=activity.id,
@@ -276,7 +278,7 @@ def toggle_activity_like(activity_id):
 
     db.session.commit()
 
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
 
 @feed_bp.route("/feed/<int:activity_id>/comments", methods=["POST"])
@@ -291,14 +293,12 @@ def add_comment(activity_id):
     comment_count = ActivityComment.query.filter_by(activity_id=activity.id).count()
     if comment_count >= 50:
         flash("Comment limit of 50 reached.", "error")
-        active_filter = request.form.get("filter", "all")
-        return redirect(url_for("feed.activity_feed", filter=active_filter))
+        return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
     body = request.form.get("body", "").strip()
     if not body:
         flash("Comment cannot be empty.", "error")
-        active_filter = request.form.get("filter", "all")
-        return redirect(url_for("feed.activity_feed", filter=active_filter))
+        return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
     db.session.add(ActivityComment(
         activity_id=activity.id,
@@ -307,8 +307,7 @@ def add_comment(activity_id):
     ))
     db.session.commit()
 
-    active_filter = request.form.get("filter", "all")
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
 
 @feed_bp.route("/feed/<int:activity_id>/comments/<int:comment_id>/delete", methods=["POST"])
@@ -331,5 +330,4 @@ def delete_comment(activity_id, comment_id):
     db.session.delete(comment)
     db.session.commit()
 
-    active_filter = request.form.get("filter", "all")
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
