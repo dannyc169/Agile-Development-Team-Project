@@ -73,33 +73,118 @@ pip install -r requirements.txt
 
 4. Configure environment variables
 
-Set the Flask `SECRET_KEY` (recommended through a `.env` file or shell export):
+Set the Flask `SECRET_KEY` for the Host, and set the Host address for Clients:
 
 ```bash
 export SECRET_KEY=replace-with-your-local-secret
+export HOST_BASE_URL=http://192.168.1.50:5000
 ```
 
 Do not commit real secrets into the repository.
 
-5. Initialize the database
+## Host-Client Deployment
 
-Tables are automatically created on startup via `db.create_all()` in `run.py`.
-A SQLite file will be generated at:
+StudySync now runs in a Host-Client layout for LAN use, while keeping the existing features, pages, and business logic unchanged.
 
-```text
-studysync/instance/studysync.db
-```
+### Host
 
-6. Run the application
+The Host owns the SQLite database and runs the full Flask backend.
+
+Run it with:
 
 ```bash
-python3 run.py
+python3 host.py
 ```
 
-7. Open in your browser
+Default Host settings:
 
-- Login: http://127.0.0.1:5000/login
-- Register: http://127.0.0.1:5000/register
+- Bind address: `0.0.0.0`
+- Port: `5000`
+- Database file: `studysync/instance/studysync.db`
+
+Optional Host overrides:
+
+```bash
+export HOST_BIND=0.0.0.0
+export HOST_PORT=5000
+export FLASK_DEBUG=1
+```
+
+### Client
+
+The Client is a thin local reverse proxy. It does not access the database directly; it forwards browser traffic to the Host over the LAN while keeping the same routes, forms, sessions, and responses.
+
+Run it with:
+
+```bash
+python3 client.py
+```
+
+Default Client settings:
+
+- Bind address: `0.0.0.0`
+- Port: `5001`
+- Upstream Host: `http://127.0.0.1:5000`
+
+Set the Host IP or hostname with:
+
+```bash
+export HOST_BASE_URL=http://192.168.1.50:5000
+export CLIENT_PORT=5001
+```
+
+Open the Client in your browser:
+
+- Client URL: http://127.0.0.1:5001
+
+The Client forwards all requests to the Host, so the existing login, dashboard, teams, tasks, feed, and wager flows remain unchanged.
+
+### Backward Compatibility
+
+The original `python3 run.py` command still starts the Host for compatibility.
+
+## End-to-End Testing
+
+An automated end-to-end test is available using Playwright. It exercises the full user journey: registration, team creation, joining, task management, and wagers.
+
+### Setup
+
+Install Playwright (required for e2e testing):
+
+```bash
+pip install playwright
+python -m playwright install
+```
+
+### Run the Test
+
+From the `studysync` directory:
+
+```bash
+python3 e2e_test.py --base-url http://127.0.0.1:5000
+```
+
+Options:
+
+- `--base-url` (default: http://127.0.0.1:5000) — URL of Host or Client
+- `--headed` — Show browser window (default: headless)
+- `--slowmo <ms>` — Slow down actions by N milliseconds for demo
+
+Example with visible browser and slowdown:
+
+```bash
+python3 e2e_test.py --base-url http://127.0.0.1:5001 --headed --slowmo 500
+```
+
+The test will:
+- Create 4 users with unique suffixes
+- Create a team and extract the invite code
+- Register members and join the team
+- Visit key pages (dashboard, todos, teams, wagers, feed)
+- Perform operations (change password, logout, login with new credentials)
+- Print clear step-by-step logs
+- Save screenshots on failure
+- Exit with status 0 on success, 1 on failure
 
 ## Quick Feature Walkthrough
 
@@ -131,6 +216,9 @@ All team members will be automatically added as participants.
 .
 ├── README.md
 └── studysync/
+    ├── client.py
+    ├── client_proxy.py
+    ├── host.py
     ├── run.py
     ├── requirements.txt
     ├── seed.py
