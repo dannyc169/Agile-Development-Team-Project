@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import and_, or_
 
 from app import db
-from app.models import Activity, ActivityComment, ActivityLike, Team, TeamMember, Task, User, Wager
+from app.models import Activity, ActivityComment, ActivityLike, Notification, Team, TeamMember, Task, User, Wager
 from app.wager_helpers import (
     calculate_total_points,
     calculate_wager_progress,
@@ -305,6 +305,15 @@ def add_comment(activity_id):
         user_id=current_user.id,
         body=body[:500],
     ))
+
+    if activity.user_id != current_user.id:
+        db.session.add(Notification(
+            user_id=activity.user_id,
+            type="comment",
+            message=f"{current_user.username} commented on your activity: \"{body[:80]}{'...' if len(body) > 80 else ''}\"",
+            link=url_for("feed.activity_feed", team_id=activity.team_id, _anchor=f"activity-{activity.id}"),
+        ))
+
     db.session.commit()
 
     return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
