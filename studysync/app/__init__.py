@@ -57,6 +57,7 @@ def create_app():
         Team,
         TeamMember,
         Task,
+        Notification,  # noqa: F401
         Wager,
         WagerParticipant,
         WagerTask,
@@ -65,6 +66,7 @@ def create_app():
     from app.teams import teams_bp
     from app.tasks import tasks_bp
     from app.feed import feed_bp
+    from app.notifications import notifications_bp
     from app.wager_helpers import (
         calculate_participant_status,
         calculate_reward_amount,
@@ -78,6 +80,7 @@ def create_app():
     app.register_blueprint(teams_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(feed_bp)
+    app.register_blueprint(notifications_bp)
 
     def is_team_leader(team_id, user_id):
         return (
@@ -370,12 +373,18 @@ def create_app():
     @app.context_processor
     def inject_global_points():
         if current_user.is_authenticated:
+            from app.models import Notification
+            unread_count = Notification.query.filter_by(
+                user_id=current_user.id, is_read=False
+            ).count()
             return {
-                "current_points": calculate_total_points(current_user.id)
+                "current_points": calculate_total_points(current_user.id),
+                "unread_notification_count": unread_count,
             }
 
         return {
-            "current_points": 0
+            "current_points": 0,
+            "unread_notification_count": 0,
         }
 
     @app.route("/")

@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app import db
-from app.models import Activity, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
+from app.models import Activity, Notification, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
 from app.wager_helpers import sync_wagers_for_task
 
 
@@ -229,6 +229,16 @@ def create_task():
     )
 
     db.session.add(task)
+
+    if assigned_to_user_id and assigned_to_user_id != current_user.id:
+        team = Team.query.get(team_id)
+        db.session.add(Notification(
+            user_id=assigned_to_user_id,
+            type="task_assigned",
+            message=f"{current_user.username} assigned you a new task: \"{title}\" in {team.name}.",
+            link=url_for("tasks.task_list"),
+        ))
+
     db.session.commit()
 
     flash("Task created!", "success")
@@ -252,6 +262,14 @@ def edit_task(task_id):
     team_id, err = validate_team_id(request.form.get("team_id"))
     if err:
         flash(err, "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not team_id:
+        flash("Tasks must be assigned to a team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_leader(team_id, current_user.id):
+        flash("Only team leaders can assign tasks to a team.", "error")
         return redirect(url_for("tasks.task_list"))
 
     old_status = task.status

@@ -209,6 +209,20 @@ class Nudge(db.Model):
     )
 
 
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # "comment" | "task_assigned"
+    message = db.Column(db.String(255), nullable=False)
+    link = db.Column(db.String(255), nullable=True)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    user = db.relationship("User", backref=db.backref("notifications", lazy=True))
+
+
 class Wager(db.Model):
     __tablename__ = "wagers"
 
