@@ -1,11 +1,11 @@
-from app import create_app, db
+"""Backward-compatible Host launcher.
 
+The dedicated Host entrypoint is `host.py`, but this file still starts the
+Host so existing workflows keep working.
+"""
 
-app = create_app()
-
-with app.app_context():
-    db.create_all()
+from host import app, main
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    main()
