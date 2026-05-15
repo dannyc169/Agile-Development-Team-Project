@@ -156,6 +156,13 @@ def task_list():
 @tasks_bp.route("/tasks/create", methods=["POST"])
 @login_required
 def create_task():
+    is_leader = TeamMember.query.filter_by(
+        user_id=current_user.id, role="leader"
+    ).first() is not None
+    if not is_leader:
+        flash("Only team leaders can create tasks.", "error")
+        return redirect(url_for("tasks.task_list"))
+
     title = request.form.get("title", "").strip()
     if not title:
         flash("Task title is required.", "error")
@@ -168,6 +175,10 @@ def create_task():
     team_id, err = validate_team_id(request.form.get("team_id"))
     if err:
         flash(err, "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not team_id:
+        flash("Tasks must be assigned to a team.", "error")
         return redirect(url_for("tasks.task_list"))
 
     due_date = None
