@@ -24,17 +24,18 @@
       <select id="teamFilter"
         class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white">
         <option value="all">All Teams</option>
-        <option value="personal">Personal</option>
         {% for team in teams %}
         <option value="{{ team.id }}">{{ team.name }}</option>
         {% endfor %}
       </select>
 
-      <!-- New Task Button -->
+      <!-- New Task Button (leaders only) -->
+      {% if is_any_leader %}
       <button id="newTaskBtn"
         class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition flex items-center gap-2 shadow-sm">
         <i class="fas fa-plus"></i> New Task
       </button>
+      {% endif %}
     </div>
 
     <!-- Search Bar -->
@@ -45,7 +46,8 @@
     </div>
   </div>
 
-  <!-- New Task Form Panel -->
+  <!-- New Task Form Panel (leaders only) -->
+  {% if is_any_leader %}
   <div id="newTaskPanel" class="bg-white rounded-lg shadow border border-gray-200 p-6 hidden">
     <h3 class="text-lg font-bold text-gray-900 mb-4">Create New Task</h3>
     <form class="space-y-4" method="POST" action="{{ url_for('tasks.create_task') }}">
@@ -80,7 +82,6 @@
         <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
         <select id="createTeamId" name="team_id"
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-          <option value="">No Team</option>
           {% for team in teams %}
             {% if team.id in leader_team_ids %}
               <option value="{{ team.id }}">{{ team.name }}</option>
@@ -106,6 +107,7 @@
       </div>
     </form>
   </div>
+  {% endif %}
 
   <!-- Task List -->
   <div class="space-y-6" id="taskList">
@@ -293,7 +295,11 @@
     <div class="text-center py-16 text-gray-400">
       <i class="fas fa-check-circle text-4xl mb-3"></i>
       <p class="text-lg font-semibold">No tasks yet</p>
+      {% if is_any_leader %}
       <p class="text-sm">Click "New Task" to get started!</p>
+      {% else %}
+      <p class="text-sm">Create or join a team first, then wait for your team leader to assign tasks to you.</p>
+      {% endif %}
     </div>
     {% endif %}
 
@@ -375,59 +381,60 @@
 {% block scripts %}
 <script type="application/json" id="teamMembersData">{{ team_members_map | tojson }}</script>
 <script>
-  // Leader team members map for assignee dropdown
-  const teamMembersMap = JSON.parse(document.getElementById('teamMembersData').textContent);
+  // New Task panel — only rendered for leaders
+  const newTaskBtn = document.getElementById('newTaskBtn');
+  if (newTaskBtn) {
+    const teamMembersMap = JSON.parse(document.getElementById('teamMembersData').textContent);
 
-  const createTeamSelect = document.getElementById('createTeamId');
-  const assigneeField = document.getElementById('assigneeField');
-  const assigneeSelect = document.getElementById('assigneeSelect');
+    const createTeamSelect = document.getElementById('createTeamId');
+    const assigneeField = document.getElementById('assigneeField');
+    const assigneeSelect = document.getElementById('assigneeSelect');
+    const newTaskPanel = document.getElementById('newTaskPanel');
 
-  function updateAssigneeField() {
-    const teamId = createTeamSelect.value;
-    const members = teamMembersMap[teamId];
-    if (members && members.length > 0) {
-      assigneeSelect.innerHTML = '<option value="">— No specific assignee —</option>';
-      members.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.username;
-        assigneeSelect.appendChild(opt);
-      });
-      assigneeField.classList.remove('hidden');
-    } else {
+    function updateAssigneeField() {
+      const teamId = createTeamSelect.value;
+      const members = teamMembersMap[teamId];
+      if (members && members.length > 0) {
+        assigneeSelect.innerHTML = '<option value="">— No specific assignee —</option>';
+        members.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.username;
+          assigneeSelect.appendChild(opt);
+        });
+        assigneeField.classList.remove('hidden');
+      } else {
+        assigneeField.classList.add('hidden');
+        assigneeSelect.innerHTML = '';
+      }
+    }
+
+    createTeamSelect.addEventListener('change', updateAssigneeField);
+
+    newTaskBtn.addEventListener('click', () => {
+      newTaskPanel.classList.toggle('hidden');
+      updateAssigneeField();
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      newTaskPanel.classList.add('hidden');
+      createTeamSelect.value = '';
       assigneeField.classList.add('hidden');
       assigneeSelect.innerHTML = '';
+    });
+
+    const taskParams = new URLSearchParams(window.location.search);
+    const shouldOpenCreate = taskParams.get('open_create') === '1';
+    const preselectedTeamId = taskParams.get('team_id');
+
+    if (preselectedTeamId) {
+      createTeamSelect.value = preselectedTeamId;
+      updateAssigneeField();
     }
-  }
 
-  createTeamSelect.addEventListener('change', updateAssigneeField);
-
-  const newTaskPanel = document.getElementById('newTaskPanel');
-
-  // New Task panel toggle
-  document.getElementById('newTaskBtn').addEventListener('click', () => {
-    newTaskPanel.classList.toggle('hidden');
-    updateAssigneeField();
-  });
-  
-  document.getElementById('cancelBtn').addEventListener('click', () => {
-    newTaskPanel.classList.add('hidden');
-    createTeamSelect.value = '';
-    assigneeField.classList.add('hidden');
-    assigneeSelect.innerHTML = '';
-  });
-
-  const taskParams = new URLSearchParams(window.location.search);
-  const shouldOpenCreate = taskParams.get('open_create') === '1';
-  const preselectedTeamId = taskParams.get('team_id');
-  
-  if (preselectedTeamId && createTeamSelect) {
-    createTeamSelect.value = preselectedTeamId;
-    updateAssigneeField();
-  }
-  
-  if (shouldOpenCreate && newTaskPanel) {
-    newTaskPanel.classList.remove('hidden');
+    if (shouldOpenCreate) {
+      newTaskPanel.classList.remove('hidden');
+    }
   }
 
   // Unified filter + search logic
