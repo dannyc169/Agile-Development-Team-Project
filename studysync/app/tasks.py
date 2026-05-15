@@ -264,6 +264,14 @@ def edit_task(task_id):
         flash(err, "error")
         return redirect(url_for("tasks.task_list"))
 
+    if not team_id:
+        flash("Tasks must be assigned to a team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_leader(team_id, current_user.id):
+        flash("Only team leaders can assign tasks to a team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
     old_status = task.status
 
     task.title = title
