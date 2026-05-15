@@ -149,6 +149,7 @@ def task_list():
         teams=teams,
         team_members_map=team_members_map,
         leader_team_ids=leader_team_ids,
+        is_any_leader=bool(leader_team_ids),
     )
 
 
