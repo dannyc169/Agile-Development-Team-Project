@@ -72,7 +72,9 @@
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
           <option value="">No Team</option>
           {% for team in teams %}
-          <option value="{{ team.id }}">{{ team.name }}</option>
+            {% if team.id in leader_team_ids %}
+              <option value="{{ team.id }}">{{ team.name }}</option>
+            {% endif %}
           {% endfor %}
         </select>
       </div>
@@ -389,14 +391,33 @@
 
   createTeamSelect.addEventListener('change', updateAssigneeField);
 
+  const newTaskPanel = document.getElementById('newTaskPanel');
+
   // New Task panel toggle
   document.getElementById('newTaskBtn').addEventListener('click', () => {
-    document.getElementById('newTaskPanel').classList.toggle('hidden');
+    newTaskPanel.classList.toggle('hidden');
+    updateAssigneeField();
   });
+  
   document.getElementById('cancelBtn').addEventListener('click', () => {
-    document.getElementById('newTaskPanel').classList.add('hidden');
+    newTaskPanel.classList.add('hidden');
+    createTeamSelect.value = '';
     assigneeField.classList.add('hidden');
+    assigneeSelect.innerHTML = '';
   });
+
+  const taskParams = new URLSearchParams(window.location.search);
+  const shouldOpenCreate = taskParams.get('open_create') === '1';
+  const preselectedTeamId = taskParams.get('team_id');
+  
+  if (preselectedTeamId && createTeamSelect) {
+    createTeamSelect.value = preselectedTeamId;
+    updateAssigneeField();
+  }
+  
+  if (shouldOpenCreate && newTaskPanel) {
+    newTaskPanel.classList.remove('hidden');
+  }
 
   // Unified filter + search logic
   let currentFilter = 'all';

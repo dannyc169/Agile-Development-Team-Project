@@ -128,6 +128,7 @@ def task_list():
 
     memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
     teams = [membership.team for membership in memberships]
+    leader_team_ids = {m.team_id for m in memberships if m.role == "leader"}
 
     # Build member lists for teams where current user is leader (for assignee dropdown)
     team_members_map = {}
@@ -147,6 +148,7 @@ def task_list():
         done=done,
         teams=teams,
         team_members_map=team_members_map,
+        leader_team_ids=leader_team_ids,
     )
 
 
