@@ -68,11 +68,13 @@ def create_app():
     from app.feed import feed_bp
     from app.notifications import notifications_bp
     from app.wager_helpers import (
+        POINTS_PER_TASK,
         calculate_participant_status,
-        calculate_reward_amount,
         calculate_total_points,
+        calculate_wager_points,
         calculate_wager_progress,
         count_wagers_won_for_user,
+        get_badge_for_points,
         resolve_linked_task,
         sync_wager_status,
     )
@@ -198,6 +200,11 @@ def create_app():
     def build_wager_view_data(wager):
         total_tasks, tasks_done_for_wager, progress_percent = calculate_wager_progress(wager)
         total_participants = len(wager.participants)
+
+        points_earned = calculate_wager_points(wager)
+        total_possible_points = total_tasks * POINTS_PER_TASK
+        badge = get_badge_for_points(points_earned)
+
         today = date.today()
 
         participants_view = []
@@ -215,11 +222,6 @@ def create_app():
                 wager.end_date,
             )
 
-            display_reward = calculate_reward_amount(
-                display_status,
-                wager.stake_amount,
-            )
-
             status_counts[display_status] += 1
 
             username = participant.user.username if participant.user else "Unknown"
@@ -234,7 +236,9 @@ def create_app():
                     "progress": progress_percent,
                     "status": display_status.replace("_", " ").title(),
                     "status_class": participant_status_class(display_status),
-                    "reward": display_reward,
+                    "reward": points_earned,
+                    "points": points_earned,
+                    "badge": badge,
                     "row_class": participant_row_class(display_status),
                     "name_class": participant_name_class(display_status),
                     "done_class": participant_done_class(display_status),
@@ -262,7 +266,6 @@ def create_app():
             "status": status_label,
             "status_key": status_key,
             "team": wager.team.name if wager.team else "",
-            "prize_pool": wager.stake_amount * max(total_participants, 1),
             "time_remaining": time_remaining,
             "participants_on_track": status_counts["on_track"] + status_counts["completed"],
             "total_participants": total_participants,
@@ -270,11 +273,19 @@ def create_app():
             "goal": wager.description,
             "start_date": format_date(wager.start_date),
             "end_date": format_date(wager.end_date),
-            "stake_amount": wager.stake_amount,
-            "penalty_rule": "Miss deadline → lose full stake",
-            "reward_rule": "Complete → get stake back + share of prize pool",
+            "points_earned": points_earned,
+            "total_possible_points": total_possible_points,
+            "points_per_task": POINTS_PER_TASK,
+            "badge": badge,
+            "penalty_rule": "Incomplete linked tasks do not earn points",
+            "reward_rule": f"Each completed linked task gives {POINTS_PER_TASK} points",
             "created_by": wager.creator.username if wager.creator else "",
             "can_manage": current_user.is_authenticated and wager.creator_id == current_user.id,
+
+            # Backward-compatible keys for older templates.
+            # These should be renamed in templates later.
+            "prize_pool": total_possible_points,
+            "stake_amount": POINTS_PER_TASK,
         }
 
         current_membership = None
@@ -287,8 +298,6 @@ def create_app():
         user_status_text = "You have not joined this wager yet."
         user_status_subtext = "Create or join a wager to track your progress."
         user_status_color = "text-gray-600"
-        stake_frozen = 0
-        potential_reward = 0
 
         if current_membership:
             current_status = calculate_participant_status(
@@ -297,15 +306,12 @@ def create_app():
                 wager.end_date,
             )
 
-            potential_reward = calculate_reward_amount(
-                current_status,
-                wager.stake_amount,
-            )
-            stake_frozen = wager.stake_amount
-
             if current_status == "completed":
                 user_status_text = "You are COMPLETED ✅"
-                user_status_subtext = "Your team has finished all linked tasks."
+                user_status_subtext = (
+                    f"Your team has finished all linked tasks and earned "
+                    f"{points_earned} points."
+                )
                 user_status_color = "text-green-600"
             elif current_status == "at_risk":
                 user_status_text = "You are AT RISK ⚠️"
@@ -327,9 +333,15 @@ def create_app():
             "status_text": user_status_text,
             "status_subtext": user_status_subtext,
             "status_color": user_status_color,
-            "stake_frozen": stake_frozen,
-            "potential_reward": potential_reward,
+            "points_earned": points_earned,
+            "total_possible_points": total_possible_points,
+            "points_per_task": POINTS_PER_TASK,
+            "badge": badge,
             "required_tasks": get_required_tasks_for_wager(wager),
+
+            # Backward-compatible keys for older templates.
+            "stake_frozen": total_possible_points,
+            "potential_reward": points_earned,
         }
 
         return wager_view, participants_view, user_status_view
@@ -346,7 +358,6 @@ def create_app():
 
         for wager in wagers:
             total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
-            total_participants = len(wager.participants)
 
             if total_tasks > 0 and done_tasks >= total_tasks:
                 continue
@@ -360,12 +371,20 @@ def create_app():
             else:
                 time_remaining = "No deadline"
 
+            points_earned = calculate_wager_points(wager)
+            total_possible_points = total_tasks * POINTS_PER_TASK
+
             return {
                 "id": wager.id,
                 "title": wager.title,
-                "prize_pool": wager.stake_amount * max(total_participants, 1),
                 "time_remaining": time_remaining,
                 "progress_percent": progress_percent,
+                "points_earned": points_earned,
+                "total_possible_points": total_possible_points,
+                "points_per_task": POINTS_PER_TASK,
+
+                # Backward-compatible key.
+                "prize_pool": total_possible_points,
             }
 
         return None
@@ -373,10 +392,11 @@ def create_app():
     @app.context_processor
     def inject_global_points():
         if current_user.is_authenticated:
-            from app.models import Notification
             unread_count = Notification.query.filter_by(
-                user_id=current_user.id, is_read=False
+                user_id=current_user.id,
+                is_read=False,
             ).count()
+
             return {
                 "current_points": calculate_total_points(current_user.id),
                 "unread_notification_count": unread_count,
@@ -416,6 +436,7 @@ def create_app():
         dashboard_wager = build_dashboard_wager_card(current_user.id)
         wagers_won_count = count_wagers_won_for_user(current_user.id)
         current_points = calculate_total_points(current_user.id)
+        current_badge = get_badge_for_points(current_points)
 
         return render_template(
             "dashboard/index.html",
@@ -427,6 +448,7 @@ def create_app():
             dashboard_wager=dashboard_wager,
             wagers_won_count=wagers_won_count,
             current_points=current_points,
+            current_badge=current_badge,
         )
 
     @app.route("/wagers")
@@ -502,7 +524,6 @@ def create_app():
             description = request.form.get("description", "").strip()
             start_date_raw = request.form.get("start_date", "").strip()
             end_date_raw = request.form.get("end_date", "").strip()
-            stake_amount_raw = request.form.get("stake_amount", "").strip()
             selected_task_ids = request.form.getlist("tasks")
 
             error = None
@@ -541,15 +562,6 @@ def create_app():
                 except ValueError:
                     error = "Please enter valid start and end dates."
 
-            if not error:
-                try:
-                    stake_amount = int(stake_amount_raw)
-
-                    if stake_amount <= 0:
-                        error = "Stake Amount must be greater than 0."
-                except ValueError:
-                    error = "Stake Amount must be a valid number."
-
             selected_tasks = []
             if not error:
                 try:
@@ -584,9 +596,10 @@ def create_app():
                         "description": description,
                         "start_date": start_date_raw,
                         "end_date": end_date_raw,
-                        "stake_amount": stake_amount_raw,
+                        "stake_amount": POINTS_PER_TASK,
                         "selected_tasks": selected_task_ids,
                     },
+                    points_per_task=POINTS_PER_TASK,
                 )
 
             new_wager = Wager(
@@ -596,7 +609,9 @@ def create_app():
                 creator_id=current_user.id,
                 start_date=start_date,
                 end_date=end_date,
-                stake_amount=stake_amount,
+                # Keep this database field for compatibility.
+                # Points are now calculated from completed linked tasks.
+                stake_amount=POINTS_PER_TASK,
                 status="active",
             )
 
@@ -641,9 +656,10 @@ def create_app():
                 "description": "",
                 "start_date": "",
                 "end_date": "",
-                "stake_amount": "",
+                "stake_amount": POINTS_PER_TASK,
                 "selected_tasks": [],
             },
+            points_per_task=POINTS_PER_TASK,
         )
 
     @app.route("/wagers/<int:wager_id>/edit", methods=["GET", "POST"])
@@ -699,7 +715,6 @@ def create_app():
             description = request.form.get("description", "").strip()
             start_date_raw = request.form.get("start_date", "").strip()
             end_date_raw = request.form.get("end_date", "").strip()
-            stake_amount_raw = request.form.get("stake_amount", "").strip()
             selected_task_ids = request.form.getlist("tasks")
 
             error = None
@@ -723,15 +738,6 @@ def create_app():
                         error = "End Date cannot be earlier than Start Date."
                 except ValueError:
                     error = "Please enter valid start and end dates."
-
-            if not error:
-                try:
-                    stake_amount = int(stake_amount_raw)
-
-                    if stake_amount <= 0:
-                        error = "Stake Amount must be greater than 0."
-                except ValueError:
-                    error = "Stake Amount must be a valid number."
 
             selected_tasks = []
             if not error:
@@ -770,16 +776,17 @@ def create_app():
                         "description": description,
                         "start_date": start_date_raw,
                         "end_date": end_date_raw,
-                        "stake_amount": stake_amount_raw,
+                        "stake_amount": POINTS_PER_TASK,
                         "selected_tasks": selected_task_ids,
                     },
+                    points_per_task=POINTS_PER_TASK,
                 )
 
             wager.title = title
             wager.description = description
             wager.start_date = start_date
             wager.end_date = end_date
-            wager.stake_amount = stake_amount
+            wager.stake_amount = POINTS_PER_TASK
 
             WagerTask.query.filter_by(wager_id=wager.id).delete()
 
@@ -811,9 +818,10 @@ def create_app():
                 "description": wager.description,
                 "start_date": format_date(wager.start_date),
                 "end_date": format_date(wager.end_date),
-                "stake_amount": wager.stake_amount,
+                "stake_amount": POINTS_PER_TASK,
                 "selected_tasks": existing_task_ids_str,
             },
+            points_per_task=POINTS_PER_TASK,
         )
 
     @app.route("/wagers/<int:wager_id>/delete", methods=["POST"])
