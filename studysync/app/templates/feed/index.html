@@ -7,33 +7,33 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
     <!-- LEFT COLUMN - Main Feed (2/3) -->
     <div class="lg:col-span-2 space-y-6">
-        <!-- Filter Tabs -->
-        <div class="flex gap-2">
-            <a href="{{ url_for('feed.activity_feed', filter='all') }}"
-               class="px-4 py-2 rounded-full font-semibold text-sm transition
-               {% if active_filter == 'all' %}
-                   bg-indigo-600 text-white
-               {% else %}
-                   text-gray-700 hover:bg-gray-100
-               {% endif %}">
-                All
-            </a>
+
+        <!-- Team Selector -->
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h2 class="text-sm font-bold text-gray-900">Team Activity</h2>
+                    <p class="text-xs text-gray-500">
+                        Select a team to view its activity, leaderboard, and active wagers.
+                    </p>
+                </div>
         
-            <a href="{{ url_for('feed.activity_feed', filter='my-teams') }}"
-               class="px-4 py-2 rounded-full font-semibold text-sm transition
-               {% if active_filter == 'my-teams' %}
-                   bg-indigo-600 text-white
-               {% else %}
-                   text-gray-700 hover:bg-gray-100
-               {% endif %}">
-                My Teams
-            </a>
-        
-            <button type="button"
-                    class="px-4 py-2 rounded-full font-semibold text-sm text-gray-400 bg-gray-100 cursor-not-allowed"
-                    disabled>
-                Friends
-            </button>
+                {% if user_teams %}
+                    <select onchange="window.location.href=this.value"
+                            class="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                        {% for team in user_teams %}
+                            <option value="{{ url_for('feed.activity_feed', team_id=team.id) }}"
+                                    {% if team.id == selected_team_id %}selected{% endif %}>
+                                {{ team.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                {% else %}
+                    <span class="text-sm text-gray-500">
+                        You are not in a team yet.
+                    </span>
+                {% endif %}
+            </div>
         </div>
 
         <!-- Activity Feed Posts -->
@@ -106,7 +106,7 @@
                         <div class="flex items-center gap-4">
                             <form method="POST" action="{{ url_for('feed.toggle_activity_like', activity_id=activity.id) }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="filter" value="{{ active_filter }}">
+                                <input type="hidden" name="team_id" value="{{ selected_team_id or '' }}">
 
                                 <button type="submit"
                                         class="flex items-center gap-2 text-sm transition
@@ -143,7 +143,7 @@
                                 {% if comment.user_id == current_user.id %}
                                 <form method="POST" action="{{ url_for('feed.delete_comment', activity_id=activity.id, comment_id=comment.id) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="filter" value="{{ active_filter }}">
+                                    <input type="hidden" name="team_id" value="{{ selected_team_id or '' }}">
                                     <button type="submit" class="text-gray-400 hover:text-red-500 text-xs mt-2">
                                         <i class="fas fa-times"></i>
                                     </button>
@@ -155,7 +155,7 @@
                             {% if activity.comments|length < 50 %}
                             <form method="POST" action="{{ url_for('feed.add_comment', activity_id=activity.id) }}" class="flex gap-2 pt-1">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="filter" value="{{ active_filter }}">
+                                <input type="hidden" name="team_id" value="{{ selected_team_id or '' }}">
                                 <input type="text" name="body" maxlength="500" placeholder="Write a comment..."
                                        class="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-400"
                                        required>
@@ -178,13 +178,13 @@
         
                     <h2 class="text-lg font-bold text-gray-900">No activity yet</h2>
         
-                    {% if active_filter == 'my-teams' %}
+                    {% if selected_team_id %}
                         <p class="text-sm text-gray-500 mt-2">
-                            There are no recent activities from your teams yet.
+                            There are no recent activities for this team yet.
                         </p>
                     {% else %}
                         <p class="text-sm text-gray-500 mt-2">
-                            Activity records will appear here once users create teams, update tasks, or complete actions.
+                            Join or create a team to see team activity here.
                         </p>
                     {% endif %}
                 </div>
@@ -194,9 +194,9 @@
     
     <!-- RIGHT SIDEBAR (1/3) -->
     <div class="lg:col-span-1 space-y-6">
-        <!-- Leaderboard This Week -->
+        <!-- Team Leaderboard -->
         <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-lg font-bold text-gray-900 mb-4">🏆 Leaderboard This Week</h2>
+            <h2 class="text-lg font-bold text-gray-900 mb-4">🏆 Team Leaderboard</h2>
             <div class="space-y-3">
                 {% if leaderboard %}
                     {% for item in leaderboard %}
