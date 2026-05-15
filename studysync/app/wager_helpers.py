@@ -1,9 +1,10 @@
 from datetime import date
 
+from sqlalchemy import or_
+
 from app import db
 from app.models import (
     Task,
-    Team,
     TeamMember,
     User,
     Wager,
@@ -13,6 +14,37 @@ from app.models import (
 
 
 POINTS_PER_TASK = 10
+
+
+def _task_user_filter(user_id):
+    """
+    Match tasks that belong to a user.
+
+    This includes:
+    - tasks created by the user
+    - tasks assigned to the user, if assigned_to_user_id exists in the model
+    """
+    filters = [Task.user_id == user_id]
+
+    if hasattr(Task, "assigned_to_user_id"):
+        filters.append(Task.assigned_to_user_id == user_id)
+
+    return or_(*filters)
+
+
+def user_owns_or_is_assigned_task(task, user_id):
+    """Return whether a task should count as this user's own contribution."""
+    if task is None:
+        return False
+
+    if task.user_id == user_id:
+        return True
+
+    assigned_to_user_id = getattr(task, "assigned_to_user_id", None)
+    if assigned_to_user_id == user_id:
+        return True
+
+    return False
 
 
 def resolve_linked_task(link, wager):
@@ -40,7 +72,12 @@ def resolve_linked_task(link, wager):
 
 
 def count_done_tasks_for_wager(wager):
-    """Count how many linked tasks of this wager are completed."""
+    """
+    Count completed linked tasks for a team-level wager.
+
+    This is used for team wager progress.
+    It does not represent one user's personal contribution.
+    """
     done_count = 0
 
     for link in wager.linked_tasks:
@@ -53,7 +90,7 @@ def count_done_tasks_for_wager(wager):
 
 
 def calculate_wager_progress(wager):
-    """Calculate wager task progress based on linked tasks."""
+    """Calculate team-level wager progress based on linked tasks."""
     total_tasks = len(wager.linked_tasks)
     done_tasks = count_done_tasks_for_wager(wager)
 
@@ -66,15 +103,68 @@ def calculate_wager_progress(wager):
 
 def calculate_wager_points(wager):
     """
-    Calculate points earned from a wager.
+    Calculate total team-level points earned by a wager.
 
-    Current rule:
-    Each completed linked task gives 10 points.
-    For team-level wagers, all participants share the same progress and points.
+    This is useful for displaying wager-level points.
+    Do not use this for a user's personal total points.
     """
     _total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
-
     return done_tasks * POINTS_PER_TASK
+
+
+def calculate_wager_points_for_user(wager, user_id):
+    """
+    Calculate points a specific user earned from one wager.
+
+    Personal points are based only on the user's own completed linked tasks:
+    - created by the user, or
+    - assigned to the user if assigned_to_user_id exists.
+    """
+    completed_task_ids = set()
+
+    for link in wager.linked_tasks:
+        linked_task = resolve_linked_task(link, wager)
+
+        if linked_task is None:
+            continue
+
+        if linked_task.status != "done":
+            continue
+
+        if not user_owns_or_is_assigned_task(linked_task, user_id):
+            continue
+
+        completed_task_ids.add(linked_task.id)
+
+    return len(completed_task_ids) * POINTS_PER_TASK
+
+
+def count_completed_linked_tasks_for_user(user_id, team_ids=None):
+    """
+    Count completed linked tasks that belong to a user.
+
+    This is used for leaderboard and personal points.
+    It counts tasks created by the user and assigned to the user.
+    """
+    query = (
+        db.session.query(Task.id)
+        .join(WagerTask, WagerTask.task_id == Task.id)
+        .join(Wager, Wager.id == WagerTask.wager_id)
+        .join(WagerParticipant, WagerParticipant.wager_id == Wager.id)
+        .filter(
+            WagerParticipant.user_id == user_id,
+            Task.status == "done",
+            _task_user_filter(user_id),
+        )
+    )
+
+    if team_ids is not None:
+        if not team_ids:
+            return 0
+
+        query = query.filter(Wager.team_id.in_(team_ids))
+
+    return query.distinct().count()
 
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):
@@ -97,24 +187,8 @@ def calculate_participant_status(tasks_done, tasks_total, end_date_value):
     return "on_track"
 
 
-def calculate_reward_amount(status, stake_amount):
-    """
-    Legacy helper kept for older route/template code.
-
-    New points logic should use calculate_wager_points(wager).
-    This function is kept temporarily so older imports do not break.
-    """
-    if status == "completed":
-        return stake_amount
-
-    if status in {"on_track", "at_risk"}:
-        return stake_amount
-
-    return 0
-
-
 def get_badge_for_points(points):
-    """Return a badge based on accumulated points."""
+    """Return a badge based on accumulated personal points."""
     if points >= 500:
         return {
             "name": "Study Champion",
@@ -157,13 +231,10 @@ def sync_wager_status(wager):
     This function only updates SQLAlchemy objects.
     The caller is responsible for db.session.commit().
 
-    Important:
-    reward_amount is currently used as the stored points field for compatibility.
-    The actual points rule is fixed:
-    1 completed linked task = 10 points.
+    Team progress is shared by all participants, but personal points are based
+    on each participant's own completed linked tasks.
     """
     total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
-    points_earned = calculate_wager_points(wager)
 
     participant_status = calculate_participant_status(
         done_tasks,
@@ -185,6 +256,11 @@ def sync_wager_status(wager):
         changed = True
 
     for participant in wager.participants:
+        personal_points = calculate_wager_points_for_user(
+            wager,
+            participant.user_id,
+        )
+
         if participant.progress != progress_percent:
             participant.progress = progress_percent
             changed = True
@@ -193,8 +269,8 @@ def sync_wager_status(wager):
             participant.status = participant_status
             changed = True
 
-        if participant.reward_amount != points_earned:
-            participant.reward_amount = points_earned
+        if participant.reward_amount != personal_points:
+            participant.reward_amount = personal_points
             changed = True
 
     return changed
@@ -274,7 +350,7 @@ def get_wagers_for_user(user_id, team_ids=None):
 
 
 def count_wagers_won_for_user(user_id, team_ids=None):
-    """Count how many wagers a user has completed."""
+    """Count how many team wagers a user has completed as a participant."""
     wagers = get_wagers_for_user(user_id, team_ids)
     won_count = 0
 
@@ -292,22 +368,18 @@ def count_wagers_won_for_user(user_id, team_ids=None):
 
 def calculate_total_points(user_id, team_ids=None):
     """
-    Calculate total wager points for a user.
+    Calculate personal total points for a user.
 
     New rule:
-    Each completed linked task gives 10 points.
-    stake_amount is no longer used for points calculation.
+    Each completed linked task gives POINTS_PER_TASK points.
+    Only the user's own completed linked tasks count.
     """
-    wagers = get_wagers_for_user(user_id, team_ids)
-    total_points = 0
+    completed_task_count = count_completed_linked_tasks_for_user(
+        user_id,
+        team_ids,
+    )
 
-    for wager in wagers:
-        if not user_is_wager_participant(user_id, wager.id):
-            continue
-
-        total_points += calculate_wager_points(wager)
-
-    return total_points
+    return completed_task_count * POINTS_PER_TASK
 
 
 def build_team_leaderboard(team_id, current_user_id=None):
@@ -320,20 +392,27 @@ def build_team_leaderboard(team_id, current_user_id=None):
     members = TeamMember.query.filter_by(team_id=team_id).all()
     leaderboard = []
 
+    avatar_colors = [
+        "bg-purple-500",
+        "bg-pink-500",
+        "bg-orange-500",
+        "bg-teal-500",
+        "bg-indigo-500",
+        "bg-blue-500",
+    ]
+
     for member in members:
         user = db.session.get(User, member.user_id)
 
         if user is None:
             continue
 
-        points = calculate_total_points(user.id, [team_id])
+        completed_task_count = count_completed_linked_tasks_for_user(
+            user.id,
+            [team_id],
+        )
+        points = completed_task_count * POINTS_PER_TASK
         badge = get_badge_for_points(points)
-
-        completed_task_count = Task.query.filter(
-            Task.user_id == user.id,
-            Task.team_id == team_id,
-            Task.status == "done",
-        ).count()
 
         leaderboard.append(
             {
@@ -357,34 +436,15 @@ def build_team_leaderboard(team_id, current_user_id=None):
 
     for index, item in enumerate(leaderboard):
         item["rank"] = index + 1
+        item["avatar_class"] = avatar_colors[index % len(avatar_colors)]
+
+        if item["rank"] == 1:
+            item["rank_class"] = "text-yellow-600"
+        elif item["rank"] == 2:
+            item["rank_class"] = "text-gray-400"
+        elif item["rank"] == 3:
+            item["rank_class"] = "text-orange-600"
+        else:
+            item["rank_class"] = "text-gray-500"
 
     return leaderboard
-
-
-def build_team_leaderboards(team_ids, current_user_id=None):
-    """
-    Build leaderboards for multiple teams.
-
-    This is useful when a user belongs to multiple teams.
-    The feed page can display one team leaderboard at a time.
-    """
-    team_leaderboards = []
-
-    for team_id in team_ids:
-        team = db.session.get(Team, team_id)
-
-        if team is None:
-            continue
-
-        team_leaderboards.append(
-            {
-                "team_id": team.id,
-                "team_name": team.name,
-                "leaderboard": build_team_leaderboard(
-                    team.id,
-                    current_user_id=current_user_id,
-                ),
-            }
-        )
-
-    return team_leaderboards

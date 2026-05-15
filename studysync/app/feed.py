@@ -197,11 +197,6 @@ def _build_active_wager_cards(team_id):
                 "tasks_total": total_tasks,
                 "container_class": theme["container_class"],
                 "badge_class": theme["badge_class"],
-
-                # Backward-compatible key.
-                # Some old templates may still render prize_pool.
-                # It now means total possible points, not stake amount.
-                "prize_pool": total_possible_points,
             }
         )
 
@@ -269,6 +264,7 @@ def activity_feed():
         like_counts=like_counts,
         active_wagers=active_wagers,
         leaderboard=leaderboard,
+        points_per_task=POINTS_PER_TASK,
     )
 
 
