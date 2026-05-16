@@ -338,19 +338,51 @@
 
 {% block content %}
 <div class="space-y-10">
-    <div class="flex items-center justify-between">
+    {#
+      Leaders can switch between their own wagers and all wagers from teams they lead.
+      Regular members only receive the personal view and will not see this toggle.
+    #}
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
             <h1 class="text-3xl font-bold text-gray-900">Wagers</h1>
             <p class="text-gray-500 mt-1">
-                Track team wager progress and earn points from completed linked tasks.
+                Track personal wager progress and earn points from your own linked tasks.
             </p>
         </div>
 
-        <a href="{{ url_for('create_wager') }}"
-           class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
-            + Create Wager
-        </a>
+        <div class="flex flex-wrap items-center gap-3">
+            {% if can_view_team_wagers|default(false) %}
+            <div class="flex items-center gap-2 rounded-xl bg-white border border-gray-200 p-1 shadow-sm">
+                <a href="{{ url_for('wagers_detail', scope='personal') }}"
+                   class="px-4 py-2 rounded-lg text-sm font-semibold transition
+                          {{ 'bg-indigo-600 text-white shadow-sm' if scope|default('personal') == 'personal' else 'text-gray-600 hover:bg-gray-50' }}">
+                    Personal
+                </a>
+
+                <a href="{{ url_for('wagers_detail', scope='team') }}"
+                   class="px-4 py-2 rounded-lg text-sm font-semibold transition
+                          {{ 'bg-indigo-600 text-white shadow-sm' if scope|default('personal') == 'team' else 'text-gray-600 hover:bg-gray-50' }}">
+                    Team Members
+                </a>
+            </div>
+            {% endif %}
+
+            <a href="{{ url_for('create_wager') }}"
+               class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
+                + Create Wager
+            </a>
+        </div>
     </div>
+
+    {% if can_view_team_wagers|default(false) %}
+    <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4 text-sm text-indigo-700">
+        {% if scope|default('personal') == 'team' %}
+            You are viewing all wagers from teams you lead.
+        {% else %}
+            You are viewing your personal wagers only.
+        {% endif %}
+    </div>
+    {% endif %}
 
     {{ render_participant_status_overview(participant_overview|default([])) }}
 
