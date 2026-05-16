@@ -5,9 +5,19 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app import db
-from app.models import Activity, ActivityComment, ActivityLike, TeamMember, Task, User, Wager
+from app.models import (
+    Activity,
+    ActivityComment,
+    ActivityLike,
+    Notification,
+    Team,
+    TeamMember,
+    Wager,
+)
 from app.wager_helpers import (
-    calculate_total_points,
+    POINTS_PER_TASK,
+    build_team_leaderboard,
+    calculate_wager_points,
     calculate_wager_progress,
 )
 
@@ -23,6 +33,41 @@ def _current_user_team_ids():
     ]
 
 
+def _current_user_teams():
+    """Return teams that the current user belongs to, ordered by name."""
+    memberships = (
+        TeamMember.query.join(Team, Team.id == TeamMember.team_id)
+        .filter(TeamMember.user_id == current_user.id)
+        .order_by(Team.name.asc())
+        .all()
+    )
+
+    return [membership.team for membership in memberships]
+
+
+def _select_feed_team(user_teams):
+    """
+    Pick the team currently shown on the feed page.
+
+    If the requested team_id is invalid or not owned by the current user,
+    fall back to the first team.
+    """
+    if not user_teams:
+        return None
+
+    selected_team_id = request.args.get("team_id", type=int)
+    valid_team_ids = [team.id for team in user_teams]
+
+    if selected_team_id not in valid_team_ids:
+        selected_team_id = valid_team_ids[0]
+
+    for team in user_teams:
+        if team.id == selected_team_id:
+            return team
+
+    return user_teams[0]
+
+
 def _can_view_activity(activity, team_ids):
     """Return whether the current user is allowed to view this activity."""
     if activity.team_id is None:
@@ -31,26 +76,84 @@ def _can_view_activity(activity, team_ids):
     return activity.team_id in team_ids
 
 
-def _build_active_wager_cards(team_ids):
-    if not team_ids:
+def _selected_team_redirect_args():
+    """Preserve the selected team after like/comment actions."""
+    selected_team_id = request.form.get("team_id", type=int)
+
+    if selected_team_id:
+        return {"team_id": selected_team_id}
+
+    return {}
+
+
+def _leaderboard_display_class(rank):
+    """Return display classes for leaderboard rank."""
+    if rank == 1:
+        return "text-yellow-600"
+
+    if rank == 2:
+        return "text-gray-400"
+
+    if rank == 3:
+        return "text-orange-600"
+
+    return "text-gray-500"
+
+
+def _add_feed_display_fields(leaderboard):
+    """
+    Add feed-only display fields to leaderboard rows.
+
+    The actual leaderboard logic stays in wager_helpers.py.
+    """
+    avatar_colors = [
+        "bg-purple-500",
+        "bg-pink-500",
+        "bg-orange-500",
+        "bg-teal-500",
+        "bg-indigo-500",
+        "bg-blue-500",
+    ]
+
+    decorated_rows = []
+
+    for index, item in enumerate(leaderboard[:5]):
+        row = dict(item)
+        rank = row.get("rank", index + 1)
+
+        row["rank"] = rank
+        row["avatar_class"] = avatar_colors[index % len(avatar_colors)]
+        row["rank_class"] = _leaderboard_display_class(rank)
+
+        badge = row.get("badge") or {}
+        row["badge_name"] = badge.get("name", "New Learner")
+        row["badge_class"] = badge.get("class", "bg-slate-100 text-slate-600")
+
+        decorated_rows.append(row)
+
+    return decorated_rows
+
+
+def _build_active_wager_cards(team_id):
+    """Build active wager cards for the selected team only."""
+    if team_id is None:
         return []
 
     today = date.today()
 
     wagers = (
-        Wager.query.filter(Wager.team_id.in_(team_ids))
+        Wager.query.filter(Wager.team_id == team_id)
         .order_by(Wager.created_at.desc())
         .all()
     )
 
     active_wagers = []
 
-    for index, wager in enumerate(wagers):
+    for wager in wagers:
         if wager.end_date and wager.end_date < today:
             continue
 
-        total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
-        total_participants = len(wager.participants)
+        total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
 
         if total_tasks > 0 and done_tasks >= total_tasks:
             continue
@@ -61,7 +164,8 @@ def _build_active_wager_cards(team_ids):
         else:
             time_remaining = "No deadline"
 
-        prize_pool = wager.stake_amount * max(total_participants, 1)
+        points_earned = calculate_wager_points(wager)
+        total_possible_points = total_tasks * POINTS_PER_TASK
 
         theme_options = [
             {
@@ -78,14 +182,19 @@ def _build_active_wager_cards(team_ids):
             },
         ]
 
-        theme = theme_options[index % len(theme_options)]
+        theme = theme_options[len(active_wagers) % len(theme_options)]
 
         active_wagers.append(
             {
                 "id": wager.id,
                 "title": wager.title,
-                "prize_pool": prize_pool,
                 "time_remaining": time_remaining,
+                "points_earned": points_earned,
+                "total_possible_points": total_possible_points,
+                "points_per_task": POINTS_PER_TASK,
+                "progress_percent": progress_percent,
+                "tasks_done": done_tasks,
+                "tasks_total": total_tasks,
                 "container_class": theme["container_class"],
                 "badge_class": theme["badge_class"],
             }
@@ -94,116 +203,28 @@ def _build_active_wager_cards(team_ids):
     return active_wagers[:3]
 
 
-def _build_leaderboard(team_ids):
-    if not team_ids:
+def _get_feed_activities(selected_team):
+    """Return activities for the selected team."""
+    if selected_team is None:
         return []
 
-    member_rows = TeamMember.query.filter(TeamMember.team_id.in_(team_ids)).all()
-    user_ids = sorted(set(row.user_id for row in member_rows))
-
-    if not user_ids:
-        return []
-
-    users = (
-        User.query.filter(User.id.in_(user_ids))
-        .order_by(User.username.asc())
+    return (
+        Activity.query.filter(Activity.team_id == selected_team.id)
+        .order_by(Activity.created_at.desc())
+        .limit(50)
         .all()
     )
-
-    leaderboard = []
-
-    avatar_colors = [
-        "bg-purple-500",
-        "bg-pink-500",
-        "bg-orange-500",
-        "bg-teal-500",
-        "bg-indigo-500",
-        "bg-blue-500",
-    ]
-
-    for user in users:
-        completed_task_count = Task.query.filter(
-            Task.user_id == user.id,
-            Task.status == "done",
-            Task.team_id.in_(team_ids),
-        ).count()
-
-        points = calculate_total_points(user.id, team_ids)
-
-        leaderboard.append(
-            {
-                "user_id": user.id,
-                "name": user.username,
-                "initial": user.username[:1].upper() if user.username else "?",
-                "completed_task_count": completed_task_count,
-                "points": points,
-                "is_current_user": user.id == current_user.id,
-            }
-        )
-
-    leaderboard.sort(
-        key=lambda item: (
-            -item["points"],
-            -item["completed_task_count"],
-            item["name"].lower(),
-        )
-    )
-
-    for index, item in enumerate(leaderboard):
-        item["rank"] = index + 1
-        item["avatar_class"] = avatar_colors[index % len(avatar_colors)]
-
-        if item["rank"] == 1:
-            item["rank_class"] = "text-yellow-600"
-        elif item["rank"] == 2:
-            item["rank_class"] = "text-gray-400"
-        elif item["rank"] == 3:
-            item["rank_class"] = "text-orange-600"
-        else:
-            item["rank_class"] = "text-gray-500"
-
-    return leaderboard[:5]
 
 
 @feed_bp.route("/feed")
 @login_required
 def activity_feed():
-    """Render the Activity Feed page with visibility-aware filtering."""
-    active_filter = request.args.get("filter", "all")
+    """Render the Activity Feed page for the selected team."""
+    user_teams = _current_user_teams()
+    selected_team = _select_feed_team(user_teams)
+    selected_team_id = selected_team.id if selected_team else None
 
-    if active_filter not in ("all", "my-teams"):
-        active_filter = "all"
-
-    team_ids = _current_user_team_ids()
-
-    activity_query = Activity.query.order_by(Activity.created_at.desc())
-
-    if active_filter == "my-teams":
-        if team_ids:
-            activity_query = activity_query.filter(Activity.team_id.in_(team_ids))
-        else:
-            activities = []
-            return render_template(
-                "feed/index.html",
-                activities=activities,
-                active_filter=active_filter,
-                liked_activity_ids=set(),
-                like_counts={},
-                active_wagers=[],
-                leaderboard=[],
-            )
-    else:
-        if team_ids:
-            activity_query = activity_query.filter(
-                or_(
-                    Activity.team_id.is_(None),
-                    Activity.team_id.in_(team_ids),
-                )
-            )
-        else:
-            activity_query = activity_query.filter(Activity.team_id.is_(None))
-
-    activities = activity_query.limit(50).all()
+    activities = _get_feed_activities(selected_team)
     activity_ids = [activity.id for activity in activities]
 
     liked_activity_ids = set()
@@ -221,17 +242,29 @@ def activity_feed():
         for activity in activities
     }
 
-    active_wagers = _build_active_wager_cards(team_ids)
-    leaderboard = _build_leaderboard(team_ids)
+    active_wagers = _build_active_wager_cards(selected_team_id)
+
+    if selected_team_id:
+        leaderboard = build_team_leaderboard(
+            selected_team_id,
+            current_user_id=current_user.id,
+        )
+    else:
+        leaderboard = []
+
+    leaderboard = _add_feed_display_fields(leaderboard)
 
     return render_template(
         "feed/index.html",
         activities=activities,
-        active_filter=active_filter,
+        user_teams=user_teams,
+        selected_team=selected_team,
+        selected_team_id=selected_team_id,
         liked_activity_ids=liked_activity_ids,
         like_counts=like_counts,
         active_wagers=active_wagers,
         leaderboard=leaderboard,
+        points_per_task=POINTS_PER_TASK,
     )
 
 
@@ -245,11 +278,6 @@ def toggle_activity_like(activity_id):
 
     if not _can_view_activity(activity, team_ids):
         abort(403)
-
-    active_filter = request.form.get("filter", "all")
-
-    if active_filter not in ("all", "my-teams"):
-        active_filter = "all"
 
     existing_like = ActivityLike.query.filter_by(
         activity_id=activity.id,
@@ -270,47 +298,75 @@ def toggle_activity_like(activity_id):
 
     db.session.commit()
 
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
 
 @feed_bp.route("/feed/<int:activity_id>/comments", methods=["POST"])
 @login_required
 def add_comment(activity_id):
+    """Add a comment to an activity if the current user can view it."""
     activity = Activity.query.get_or_404(activity_id)
 
     team_ids = _current_user_team_ids()
+
     if not _can_view_activity(activity, team_ids):
         abort(403)
 
-    comment_count = ActivityComment.query.filter_by(activity_id=activity.id).count()
+    comment_count = ActivityComment.query.filter_by(
+        activity_id=activity.id,
+    ).count()
+
     if comment_count >= 50:
         flash("Comment limit of 50 reached.", "error")
-        active_filter = request.form.get("filter", "all")
-        return redirect(url_for("feed.activity_feed", filter=active_filter))
+        return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
     body = request.form.get("body", "").strip()
+
     if not body:
         flash("Comment cannot be empty.", "error")
-        active_filter = request.form.get("filter", "all")
-        return redirect(url_for("feed.activity_feed", filter=active_filter))
+        return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
-    db.session.add(ActivityComment(
-        activity_id=activity.id,
-        user_id=current_user.id,
-        body=body[:500],
-    ))
+    comment_body = body[:500]
+
+    db.session.add(
+        ActivityComment(
+            activity_id=activity.id,
+            user_id=current_user.id,
+            body=comment_body,
+        )
+    )
+
+    if activity.user_id != current_user.id:
+        preview = body[:80]
+        if len(body) > 80:
+            preview += "..."
+
+        db.session.add(
+            Notification(
+                user_id=activity.user_id,
+                type="comment",
+                message=f'{current_user.username} commented on your activity: "{preview}"',
+                link=url_for(
+                    "feed.activity_feed",
+                    team_id=activity.team_id,
+                    _anchor=f"activity-{activity.id}",
+                ),
+            )
+        )
+
     db.session.commit()
 
-    active_filter = request.form.get("filter", "all")
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))
 
 
 @feed_bp.route("/feed/<int:activity_id>/comments/<int:comment_id>/delete", methods=["POST"])
 @login_required
 def delete_comment(activity_id, comment_id):
+    """Delete the current user's own comment."""
     activity = Activity.query.get_or_404(activity_id)
 
     team_ids = _current_user_team_ids()
+
     if not _can_view_activity(activity, team_ids):
         abort(403)
 
@@ -325,5 +381,4 @@ def delete_comment(activity_id, comment_id):
     db.session.delete(comment)
     db.session.commit()
 
-    active_filter = request.form.get("filter", "all")
-    return redirect(url_for("feed.activity_feed", filter=active_filter))
+    return redirect(url_for("feed.activity_feed", **_selected_team_redirect_args()))

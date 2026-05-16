@@ -10,6 +10,7 @@ from app.forms import TeamCreateForm, TeamJoinForm
 from app.models import Activity, Nudge, Task, Team, TeamMember, User, is_team_leader, is_team_member
 
 teams_bp = Blueprint("teams", __name__, url_prefix="/teams")
+MAX_TEAM_MEMBERS = 10
 
 
 def _generate_team_code(length=6):
@@ -62,12 +63,14 @@ def join_team():
 		if team is None:
 			flash("Team code not found.", "error")
 		elif is_team_member(team.id, current_user.id):
-			flash("You are already a member of this team.", "error")
+		    flash("You are already a member of this team.", "error")
+		elif TeamMember.query.filter_by(team_id=team.id).count() >= MAX_TEAM_MEMBERS:
+		    flash(f"This team is full. The maximum team size is {MAX_TEAM_MEMBERS} members.", "error")
 		else:
-			db.session.add(TeamMember(team_id=team.id, user_id=current_user.id, role="member"))
-			db.session.commit()
-			flash("Joined team successfully.", "success")
-			return redirect(url_for("teams.team_detail", team_id=team.id))
+		    db.session.add(TeamMember(team_id=team.id, user_id=current_user.id, role="member"))
+		    db.session.commit()
+		    flash("Joined team successfully.", "success")
+		    return redirect(url_for("teams.team_detail", team_id=team.id))
 	return render_template("teams/join.html", form=form)
 
 
@@ -194,6 +197,7 @@ def team_detail(team_id):
 		done_tasks_count=done_tasks_count,
 		completion_rate=completion_rate,
 		member_task_stats=member_task_stats,
+		max_team_members=MAX_TEAM_MEMBERS,
 	)
 
 
