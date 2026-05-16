@@ -58,24 +58,18 @@
             {% endif %}
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4">
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Points Earned</p>
-                <p class="text-4xl font-bold">
-                    ⭐ {{ wager.points_earned|default(wager.prize_pool) }} /
-                    {{ wager.total_possible_points|default(wager.prize_pool) }} pts
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+          <div>
+                <p class="text-sm text-indigo-100">Points Earned</p>
+                <p class="text-4xl font-bold mt-2">
+                    ⭐ {{ wager.points_earned }} / {{ wager.total_possible_points }} pts
                 </p>
             </div>
-
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Time Remaining</p>
-                <p class="text-4xl font-bold">⏰ {{ wager.time_remaining }}</p>
-            </div>
-
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Participants On Track</p>
-                <p class="text-4xl font-bold">
-                    {{ wager.participants_on_track }}/{{ wager.total_participants }}
+        
+            <div class="md:text-right">
+                <p class="text-sm text-indigo-100">Time Remaining</p>
+                <p class="text-4xl font-bold mt-2">
+                    ⏰ {{ wager.time_remaining }}
                 </p>
             </div>
         </div>
