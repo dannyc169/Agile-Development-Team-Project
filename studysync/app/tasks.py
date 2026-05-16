@@ -24,8 +24,8 @@ def redirect_after_task_action(default_endpoint="tasks.task_list"):
     """
     Redirect back to the page where the task action was submitted from.
 
-    This keeps leaders on the My Teams member task page after editing tasks
-    or managing subtasks there. Only internal relative paths are allowed.
+    This keeps leaders on the My Teams member task page after editing tasks.
+    Only internal relative paths are allowed.
     """
     return_to = request.form.get("return_to", "").strip()
 
@@ -33,6 +33,17 @@ def redirect_after_task_action(default_endpoint="tasks.task_list"):
         return redirect(return_to)
 
     return redirect(url_for(default_endpoint))
+
+
+def get_effective_task_owner_id(task):
+    """
+    Return the user who owns the task progress.
+
+    Rule:
+    - Assigned tasks belong to the assignee.
+    - Unassigned tasks belong to the creator.
+    """
+    return task.assigned_to_user_id or task.user_id
 
 
 def can_manage_task(task, user_id):
@@ -49,9 +60,11 @@ def can_work_on_task(task, user_id):
     """
     Return whether the user can update task progress.
 
-    The task creator and assigned member can update task status and subtasks.
+    Progress includes direct completion and subtask changes.
+    For assigned tasks, only the assignee can update progress.
+    For unassigned tasks, only the creator can update progress.
     """
-    return task.user_id == user_id or task.assigned_to_user_id == user_id
+    return get_effective_task_owner_id(task) == user_id
 
 
 def validate_team_id(team_id_str):
@@ -83,26 +96,37 @@ def validate_priority(priority):
     return priority
 
 
-def format_status_label(status):
+def normalised_task_status(status):
     """
-    Return a user-friendly task status label.
+    Normalise old task statuses for the simplified task flow.
 
-    in_progress is treated as Todo for backward compatibility with older data.
-    The app no longer uses a separate in_progress task flow.
+    The app no longer uses in_progress as a separate workflow state.
+    Any non-done status is treated as todo.
     """
+    if status == "done":
+        return "done"
+
+    return "todo"
+
+
+def format_status_label(status):
+    """Return a user-friendly task status label."""
     labels = {
         "todo": "Todo",
         "in_progress": "Todo",
         "done": "Done",
     }
 
-    return labels.get(status, status)
+    return labels.get(status, "Todo")
 
 
 def create_task_status_activity(task, old_status, new_status):
     """Create an activity record when a team task status changes."""
     if task.team_id is None:
         return
+
+    old_status = normalised_task_status(old_status)
+    new_status = normalised_task_status(new_status)
 
     if old_status == new_status:
         return
@@ -133,13 +157,16 @@ def handle_task_status_change(task, old_status):
     """
     Handle side effects when task.status changes.
 
-    This is the correct place to create activity records and sync linked wagers.
+    This creates activity records and syncs linked wagers.
     GET pages should only read data and should not commit sync changes.
     """
-    if task.status == old_status:
+    old_status = normalised_task_status(old_status)
+    new_status = normalised_task_status(task.status)
+
+    if old_status == new_status:
         return
 
-    create_task_status_activity(task, old_status, task.status)
+    create_task_status_activity(task, old_status, new_status)
     sync_wagers_for_task(task)
 
 
@@ -165,7 +192,7 @@ def task_list():
     overdue, due_today, upcoming, done = [], [], [], []
 
     for task in tasks:
-        if task.status == "done":
+        if normalised_task_status(task.status) == "done":
             done.append(task)
         elif task.due_date is None:
             upcoming.append(task)
