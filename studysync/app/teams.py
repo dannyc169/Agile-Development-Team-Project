@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
@@ -17,7 +17,7 @@ from app.models import (
     is_team_leader,
     is_team_member,
 )
-
+from app.time_utils import now_app_time
 
 teams_bp = Blueprint("teams", __name__, url_prefix="/teams")
 MAX_TEAM_MEMBERS = 10
@@ -220,7 +220,7 @@ def team_detail(team_id):
             if nudge.task_id not in latest_nudges_by_task:
                 latest_nudges_by_task[nudge.task_id] = nudge
 
-        cooldown_start = datetime.now(timezone.utc) - timedelta(hours=24)
+        cooldown_start = now_app_time() - timedelta(hours=24)
         cooldown_task_ids = {
             nudge.task_id
             for nudge in Nudge.query.filter(
@@ -282,7 +282,7 @@ def nudge_task(team_id, task_id):
         flash("You can only nudge members of this team.", "error")
         return redirect(url_for("teams.team_detail", team_id=team.id))
 
-    cooldown_start = datetime.now(timezone.utc) - timedelta(hours=24)
+    cooldown_start = now_app_time() - timedelta(hours=24)
 
     recent_nudge = (
         Nudge.query.filter_by(
