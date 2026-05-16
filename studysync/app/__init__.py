@@ -58,6 +58,7 @@ def create_app():
         Team,
         TeamMember,
         Task,
+        Activity,
         Notification,  # noqa: F401
         Wager,
         WagerParticipant,
@@ -564,6 +565,71 @@ def create_app():
 
         return None
 
+    def build_dashboard_team_progress(user_id):
+        """Build real team task completion progress for the dashboard."""
+        memberships = TeamMember.query.filter_by(user_id=user_id).all()
+        progress_rows = []
+
+        for membership in memberships:
+            team = membership.team
+
+            if team is None:
+                continue
+
+            tasks = Task.query.filter_by(team_id=team.id).all()
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for task in tasks if task.status == "done")
+
+            progress_percent = (
+                int((completed_tasks / total_tasks) * 100)
+                if total_tasks > 0
+                else 0
+            )
+
+            progress_rows.append(
+                {
+                    "team_id": team.id,
+                    "team_name": team.name,
+                    "completed_tasks": completed_tasks,
+                    "total_tasks": total_tasks,
+                    "progress_percent": progress_percent,
+                }
+            )
+
+        progress_rows.sort(key=lambda row: row["team_name"].lower())
+        return progress_rows
+
+    def build_dashboard_recent_activities(user_id, limit=5):
+        """Build recent activity rows from teams the user belongs to."""
+        memberships = TeamMember.query.filter_by(user_id=user_id).all()
+        team_ids = [membership.team_id for membership in memberships]
+
+        if not team_ids:
+            return []
+
+        activities = (
+            Activity.query.filter(Activity.team_id.in_(team_ids))
+            .order_by(Activity.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "message": activity.message,
+                "team_name": activity.team.name if activity.team else "Team activity",
+                "actor_name": activity.user.username if activity.user else "StudySync",
+                "actor_initial": (
+                    activity.user.username[:1].upper()
+                    if activity.user and activity.user.username
+                    else "S"
+                ),
+                "created_at": activity.created_at,
+            }
+            for activity in activities
+        ]
+
+
     @app.context_processor
     def inject_global_points():
         if current_user.is_authenticated:
@@ -620,6 +686,8 @@ def create_app():
         wagers_won_count = count_wagers_won_for_user(current_user.id)
         current_points = calculate_total_points(current_user.id)
         current_badge = get_badge_for_points(current_points)
+        team_progress_rows = build_dashboard_team_progress(current_user.id)
+        recent_activities = build_dashboard_recent_activities(current_user.id)
 
         return render_template(
             "dashboard/index.html",
@@ -632,6 +700,8 @@ def create_app():
             wagers_won_count=wagers_won_count,
             current_points=current_points,
             current_badge=current_badge,
+            team_progress_rows=team_progress_rows,
+            recent_activities=recent_activities,
         )
 
     @app.route("/wagers")
