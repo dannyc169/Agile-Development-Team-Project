@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, redirect, render_template, url_for
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from flask_login import current_user, login_required
 
 from app import db
@@ -296,8 +296,11 @@ def member_tasks(team_id, user_id):
 	    Task.query.filter(
 	        Task.team_id == team.id,
 	        or_(
-	            Task.user_id == member_user.id,
 	            Task.assigned_to_user_id == member_user.id,
+	            and_(
+	                Task.user_id == member_user.id,
+	                Task.assigned_to_user_id == None,
+	            ),
 	        ),
 	    )
 	    .order_by(Task.due_date.asc(), Task.created_at.desc())
