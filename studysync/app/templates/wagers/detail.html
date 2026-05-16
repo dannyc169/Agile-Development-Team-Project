@@ -339,8 +339,10 @@
 {% block content %}
 <div class="space-y-10">
     {#
-      Leaders can switch between their own wagers and all wagers from teams they lead.
-      Regular members only receive the personal view and will not see this toggle.
+      Page toolbar:
+      - Leaders can switch between Personal and Team Members views.
+      - Everyone can filter the current view by team.
+      - The available teams are prepared by the route based on the current scope.
     #}
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -351,21 +353,51 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
+            {% set current_scope = scope|default('personal') %}
+            {% set current_team_id = selected_team_id|default(none) %}
+            {% set current_team_filter = current_team_id if current_team_id else 'all' %}
+
             {% if can_view_team_wagers|default(false) %}
             <div class="flex items-center gap-2 rounded-xl bg-white border border-gray-200 p-1 shadow-sm">
-                <a href="{{ url_for('wagers_detail', scope='personal') }}"
+                <a href="{{ url_for('wagers_detail', scope='personal', team_id=current_team_filter) }}"
                    class="px-4 py-2 rounded-lg text-sm font-semibold transition
-                          {{ 'bg-indigo-600 text-white shadow-sm' if scope|default('personal') == 'personal' else 'text-gray-600 hover:bg-gray-50' }}">
+                          {{ 'bg-indigo-600 text-white shadow-sm' if current_scope == 'personal' else 'text-gray-600 hover:bg-gray-50' }}">
                     Personal
                 </a>
 
-                <a href="{{ url_for('wagers_detail', scope='team') }}"
+                <a href="{{ url_for('wagers_detail', scope='team', team_id=current_team_filter) }}"
                    class="px-4 py-2 rounded-lg text-sm font-semibold transition
-                          {{ 'bg-indigo-600 text-white shadow-sm' if scope|default('personal') == 'team' else 'text-gray-600 hover:bg-gray-50' }}">
+                          {{ 'bg-indigo-600 text-white shadow-sm' if current_scope == 'team' else 'text-gray-600 hover:bg-gray-50' }}">
                     Team Members
                 </a>
             </div>
             {% endif %}
+
+            {# Team filter for the current Wager view. #}
+            <form method="GET"
+                  action="{{ url_for('wagers_detail') }}"
+                  class="flex items-center gap-2">
+                <input type="hidden" name="scope" value="{{ current_scope }}">
+
+                <label for="teamFilter" class="text-sm font-semibold text-gray-600">
+                    Team
+                </label>
+
+                <select id="teamFilter"
+                        name="team_id"
+                        onchange="this.form.submit()"
+                        class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500">
+                    <option value="all" {{ 'selected' if not current_team_id else '' }}>
+                        All Teams
+                    </option>
+
+                    {% for team in team_filter_teams|default([]) %}
+                    <option value="{{ team.id }}" {{ 'selected' if current_team_id == team.id else '' }}>
+                        {{ team.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
 
             <a href="{{ url_for('create_wager') }}"
                class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
@@ -380,6 +412,10 @@
             You are viewing all wagers from teams you lead.
         {% else %}
             You are viewing your personal wagers only.
+        {% endif %}
+
+        {% if selected_team_id|default(none) %}
+            <span class="ml-1">The list is filtered by the selected team.</span>
         {% endif %}
     </div>
     {% endif %}
