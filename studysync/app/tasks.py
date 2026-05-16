@@ -2,19 +2,46 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-
 from sqlalchemy import and_, or_
 
 from app import db
-from app.models import Activity, Notification, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
+from app.models import (
+    Activity,
+    Notification,
+    Subtask,
+    Task,
+    Team,
+    TeamMember,
+    is_team_leader,
+    is_team_member,
+)
 from app.wager_helpers import sync_wagers_for_task
 
 
 tasks_bp = Blueprint("tasks", __name__)
 
 
+def can_manage_task(task, user_id):
+    """
+    Return whether the user can edit or delete this task.
+
+    Task management is limited to the task creator.
+    Assigned members can view and complete tasks, but cannot edit task details.
+    """
+    return task.user_id == user_id
+
+
+def can_work_on_task(task, user_id):
+    """
+    Return whether the user can update task progress.
+
+    The task creator and assigned member can update task status and subtasks.
+    """
+    return task.user_id == user_id or task.assigned_to_user_id == user_id
+
+
 def validate_team_id(team_id_str):
-    """Validate team_id belongs to current user."""
+    """Validate that the selected team belongs to the current user."""
     if not team_id_str:
         return None, None
 
@@ -35,6 +62,7 @@ def validate_team_id(team_id_str):
 
 
 def validate_priority(priority):
+    """Return a safe priority value."""
     if priority not in ("low", "medium", "high"):
         return "medium"
 
@@ -67,7 +95,8 @@ def create_task_status_activity(task, old_status, new_status):
         action_type = "moved_task_status"
         message = (
             f"{current_user.username} moved {task.title} "
-            f"from {format_status_label(old_status)} to {format_status_label(new_status)}."
+            f"from {format_status_label(old_status)} "
+            f"to {format_status_label(new_status)}."
         )
 
     db.session.add(
@@ -101,13 +130,12 @@ def task_list():
     now = datetime.now(timezone.utc)
 
     tasks = (
-        Task.query
-        .filter(
+        Task.query.filter(
             or_(
                 Task.assigned_to_user_id == current_user.id,
                 and_(
                     Task.user_id == current_user.id,
-                    Task.assigned_to_user_id == None,
+                    Task.assigned_to_user_id.is_(None),
                 ),
             )
         )
@@ -133,14 +161,18 @@ def task_list():
     teams = [membership.team for membership in memberships]
     leader_team_ids = {m.team_id for m in memberships if m.role == "leader"}
 
-    # Build member lists for teams where current user is leader (for assignee dropdown)
+    # Build member lists for teams where the current user is leader.
+    # This is used by the task creation assignee dropdown.
     team_members_map = {}
-    for m in memberships:
-        if m.role == "leader":
-            members = TeamMember.query.filter_by(team_id=m.team_id).all()
-            team_members_map[str(m.team_id)] = [
-                {"id": tm.user_id, "username": tm.user.username}
-                for tm in members
+    for membership in memberships:
+        if membership.role == "leader":
+            members = TeamMember.query.filter_by(team_id=membership.team_id).all()
+            team_members_map[str(membership.team_id)] = [
+                {
+                    "id": team_member.user_id,
+                    "username": team_member.user.username,
+                }
+                for team_member in members
             ]
 
     return render_template(
@@ -159,9 +191,14 @@ def task_list():
 @tasks_bp.route("/tasks/create", methods=["POST"])
 @login_required
 def create_task():
-    is_leader = TeamMember.query.filter_by(
-        user_id=current_user.id, role="leader"
-    ).first() is not None
+    is_leader = (
+        TeamMember.query.filter_by(
+            user_id=current_user.id,
+            role="leader",
+        ).first()
+        is not None
+    )
+
     if not is_leader:
         flash("Only team leaders can create tasks.", "error")
         return redirect(url_for("tasks.task_list"))
@@ -195,31 +232,34 @@ def create_task():
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
 
-    # Validate team permissions and resolve assignee
+    team = Team.query.get(team_id)
+    if team is None:
+        flash("Selected team not found.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_member(team_id, current_user.id):
+        flash("Not authorized to assign tasks to this team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_leader(team_id, current_user.id):
+        flash("Only team leaders can assign tasks to a team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
     assigned_to_user_id = None
-    if team_id:
-        team = Team.query.get(team_id)
-        if team is None:
-            flash("Selected team not found.", "error")
-            return redirect(url_for("tasks.task_list"))
-        if not is_team_member(team_id, current_user.id):
-            flash("Not authorized to assign tasks to this team.", "error")
-            return redirect(url_for("tasks.task_list"))
-        if not is_team_leader(team_id, current_user.id):
-            flash("Only team leaders can assign tasks to a team.", "error")
+    assignee_id_str = request.form.get("assigned_to_user_id", "").strip()
+
+    if assignee_id_str:
+        try:
+            assignee_id = int(assignee_id_str)
+        except ValueError:
+            flash("Invalid assignee.", "error")
             return redirect(url_for("tasks.task_list"))
 
-        assignee_id_str = request.form.get("assigned_to_user_id", "").strip()
-        if assignee_id_str:
-            try:
-                assignee_id = int(assignee_id_str)
-            except ValueError:
-                flash("Invalid assignee.", "error")
-                return redirect(url_for("tasks.task_list"))
-            if not is_team_member(team_id, assignee_id):
-                flash("Assignee is not a member of this team.", "error")
-                return redirect(url_for("tasks.task_list"))
-            assigned_to_user_id = assignee_id
+        if not is_team_member(team_id, assignee_id):
+            flash("Assignee is not a member of this team.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        assigned_to_user_id = assignee_id
 
     task = Task(
         title=title,
@@ -234,13 +274,17 @@ def create_task():
     db.session.add(task)
 
     if assigned_to_user_id and assigned_to_user_id != current_user.id:
-        team = Team.query.get(team_id)
-        db.session.add(Notification(
-            user_id=assigned_to_user_id,
-            type="task_assigned",
-            message=f"{current_user.username} assigned you a new task: \"{title}\" in {team.name}.",
-            link=url_for("tasks.task_list"),
-        ))
+        db.session.add(
+            Notification(
+                user_id=assigned_to_user_id,
+                type="task_assigned",
+                message=(
+                    f'{current_user.username} assigned you a new task: '
+                    f'"{title}" in {team.name}.'
+                ),
+                link=url_for("tasks.task_list"),
+            )
+        )
 
     db.session.commit()
 
@@ -253,7 +297,7 @@ def create_task():
 def edit_task(task_id):
     task = Task.query.get_or_404(task_id)
 
-    if task.user_id != current_user.id:
+    if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
@@ -280,8 +324,7 @@ def edit_task(task_id):
     task.title = title
     task.description = request.form.get("description", "").strip() or None
     task.team_id = team_id
-    if task.user_id == current_user.id:
-        task.priority = validate_priority(request.form.get("priority", "medium"))
+    task.priority = validate_priority(request.form.get("priority", "medium"))
 
     new_status = request.form.get("status")
     if new_status in ("todo", "in_progress", "done"):
@@ -312,7 +355,8 @@ def edit_task(task_id):
 @login_required
 def update_status(task_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
@@ -332,7 +376,7 @@ def update_status(task_id):
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
 
-    if task.user_id != current_user.id:
+    if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
@@ -344,6 +388,7 @@ def delete_task(task_id):
 
 
 def _sync_task_status(task):
+    """Sync parent task status based on subtask completion."""
     subtasks = task.subtasks
 
     if not subtasks:
@@ -364,7 +409,8 @@ def _sync_task_status(task):
 @login_required
 def add_subtask(task_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
@@ -389,7 +435,8 @@ def add_subtask(task_id):
 @login_required
 def toggle_subtask(task_id, subtask_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
@@ -414,7 +461,8 @@ def toggle_subtask(task_id, subtask_id):
 @login_required
 def delete_subtask(task_id, subtask_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
         return redirect(url_for("tasks.task_list"))
 
