@@ -23,6 +23,8 @@
           data-filter="in_progress">In Progress</button>
         <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
           data-filter="done">Done</button>
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
+          data-filter="personal">Personal</button>
       </div>
       <!-- Team Filter -->
       <select id="teamFilter"
@@ -131,7 +133,8 @@
     <div class="bg-white border-l-4 {{ border_color }} rounded-lg p-4 hover:shadow-md transition-shadow task-card"
       data-status="{{ task.status }}"
       data-title="{{ task.title | lower }}"
-      data-team-id="{{ task.team_id or 'personal' }}">
+      data-team-id="{{ task.team_id or 'personal' }}"
+      data-assigned-to-me="{{ 'true' if task.assigned_to_user_id == current_user.id else 'false' }}">
       <div class="flex items-start gap-4">
 
         <!-- Status dot -->
@@ -454,7 +457,14 @@
 
   function applyFilters() {
     document.querySelectorAll('.task-card').forEach(card => {
-      const matchFilter = currentFilter === 'all' || card.dataset.status === currentFilter;
+      let matchFilter;
+      if (currentFilter === 'all') {
+        matchFilter = true;
+      } else if (currentFilter === 'personal') {
+        matchFilter = card.dataset.assignedToMe === 'true';
+      } else {
+        matchFilter = card.dataset.status === currentFilter;
+      }
       const matchSearch = card.dataset.title.includes(currentSearch);
       const matchTeam = currentTeam === 'all' || card.dataset.teamId === currentTeam;
       card.style.display = (matchFilter && matchSearch && matchTeam) ? '' : 'none';
