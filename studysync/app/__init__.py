@@ -73,6 +73,7 @@ def create_app():
         calculate_total_points,
         calculate_wager_points,
         calculate_wager_progress,
+        calculate_wager_user_progress,
         count_wagers_won_for_user,
         get_badge_for_points,
         resolve_linked_task,
@@ -169,16 +170,22 @@ def create_app():
 
         return tasks
 
-    def calculate_wager_status_key(wager, status_counts, total_participants):
+    def calculate_wager_status_key(
+        wager,
+        status_counts,
+        team_tasks_done,
+        team_tasks_total,
+    ):
+        """Return the overall wager status based on team-level progress."""
         today = date.today()
 
-        if total_participants > 0 and status_counts["completed"] == total_participants:
+        if team_tasks_total > 0 and team_tasks_done >= team_tasks_total:
             return "completed"
 
         if (
             wager.end_date is not None
             and today > wager.end_date
-            and status_counts["completed"] < total_participants
+            and team_tasks_done < team_tasks_total
         ):
             return "failed"
 
@@ -198,12 +205,40 @@ def create_app():
         return mapping.get(status_key, "ACTIVE")
 
     def build_wager_view_data(wager):
-        total_tasks, tasks_done_for_wager, progress_percent = calculate_wager_progress(wager)
+        """Build display data for the wager detail page.
+
+        The wager itself still uses team-level progress because linked tasks are
+        shared by the whole team. Participant rows and the current user's status
+        use personal progress so assigned tasks only count for the assignee.
+        """
+        total_tasks, tasks_done_for_wager, progress_percent = calculate_wager_progress(
+            wager
+        )
         total_participants = len(wager.participants)
 
         points_earned = calculate_wager_points(wager)
         total_possible_points = total_tasks * POINTS_PER_TASK
         badge = get_badge_for_points(points_earned)
+
+        current_user_tasks_total = 0
+        current_user_tasks_done = 0
+        current_user_progress = 0
+        current_user_points = 0
+        current_user_total_possible_points = 0
+        current_user_badge = get_badge_for_points(0)
+
+        if current_user.is_authenticated:
+            (
+                current_user_tasks_total,
+                current_user_tasks_done,
+                current_user_progress,
+            ) = calculate_wager_user_progress(wager, current_user.id)
+
+            current_user_points = current_user_tasks_done * POINTS_PER_TASK
+            current_user_total_possible_points = (
+                current_user_tasks_total * POINTS_PER_TASK
+            )
+            current_user_badge = get_badge_for_points(current_user_points)
 
         today = date.today()
 
@@ -216,9 +251,18 @@ def create_app():
         }
 
         for idx, participant in enumerate(wager.participants):
+            (
+                personal_tasks_total,
+                personal_tasks_done,
+                personal_progress,
+            ) = calculate_wager_user_progress(wager, participant.user_id)
+
+            personal_points = personal_tasks_done * POINTS_PER_TASK
+            personal_badge = get_badge_for_points(personal_points)
+
             display_status = calculate_participant_status(
-                tasks_done_for_wager,
-                total_tasks,
+                personal_tasks_done,
+                personal_tasks_total,
                 wager.end_date,
             )
 
@@ -231,14 +275,14 @@ def create_app():
                     "name": username,
                     "avatar": username[0].upper() if username else "?",
                     "avatar_color": avatar_color_for_index(idx),
-                    "tasks_done": tasks_done_for_wager,
-                    "tasks_total": total_tasks,
-                    "progress": progress_percent,
+                    "tasks_done": personal_tasks_done,
+                    "tasks_total": personal_tasks_total,
+                    "progress": personal_progress,
                     "status": display_status.replace("_", " ").title(),
                     "status_class": participant_status_class(display_status),
-                    "reward": points_earned,
-                    "points": points_earned,
-                    "badge": badge,
+                    "reward": personal_points,
+                    "points": personal_points,
+                    "badge": personal_badge,
                     "row_class": participant_row_class(display_status),
                     "name_class": participant_name_class(display_status),
                     "done_class": participant_done_class(display_status),
@@ -257,7 +301,12 @@ def create_app():
             days_over = (today - wager.end_date).days
             time_remaining = f"Overdue by {days_over}d"
 
-        status_key = calculate_wager_status_key(wager, status_counts, total_participants)
+        status_key = calculate_wager_status_key(
+            wager,
+            status_counts,
+            tasks_done_for_wager,
+            total_tasks,
+        )
         status_label = calculate_wager_status_label(status_key)
 
         wager_view = {
@@ -267,7 +316,9 @@ def create_app():
             "status_key": status_key,
             "team": wager.team.name if wager.team else "",
             "time_remaining": time_remaining,
-            "participants_on_track": status_counts["on_track"] + status_counts["completed"],
+            "participants_on_track": (
+                status_counts["on_track"] + status_counts["completed"]
+            ),
             "total_participants": total_participants,
             "overall_progress": overall_progress,
             "goal": wager.description,
@@ -280,7 +331,9 @@ def create_app():
             "penalty_rule": "Incomplete linked tasks do not earn points",
             "reward_rule": f"Each completed linked task gives {POINTS_PER_TASK} points",
             "created_by": wager.creator.username if wager.creator else "",
-            "can_manage": current_user.is_authenticated and wager.creator_id == current_user.id,
+            "can_manage": (
+                current_user.is_authenticated and wager.creator_id == current_user.id
+            ),
 
             # Backward-compatible keys for older templates.
             # These should be renamed in templates later.
@@ -301,52 +354,65 @@ def create_app():
 
         if current_membership:
             current_status = calculate_participant_status(
-                tasks_done_for_wager,
-                total_tasks,
+                current_user_tasks_done,
+                current_user_tasks_total,
                 wager.end_date,
             )
 
-            if current_status == "completed":
+            if current_user_tasks_total == 0:
+                user_status_text = "No linked task assigned to you yet"
+                user_status_subtext = (
+                    "You will earn points when a linked task is assigned to you "
+                    "and completed."
+                )
+                user_status_color = "text-gray-600"
+            elif current_status == "completed":
                 user_status_text = "You are COMPLETED ✅"
                 user_status_subtext = (
-                    f"Your team has finished all linked tasks and earned "
-                    f"{points_earned} points."
+                    "You have completed your linked task contribution and earned "
+                    f"{current_user_points} points."
                 )
                 user_status_color = "text-green-600"
             elif current_status == "at_risk":
                 user_status_text = "You are AT RISK ⚠️"
-                user_status_subtext = "The deadline is close and there is still work remaining."
+                user_status_subtext = (
+                    "The deadline is close and your linked tasks are not complete yet."
+                )
                 user_status_color = "text-yellow-600"
             elif current_status == "failed":
                 user_status_text = "You have FAILED ❌"
-                user_status_subtext = "This wager has been missed."
+                user_status_subtext = (
+                    "Your linked tasks were not completed before the deadline."
+                )
                 user_status_color = "text-red-600"
             else:
-                remaining = max(total_tasks - tasks_done_for_wager, 0)
+                remaining = max(current_user_tasks_total - current_user_tasks_done, 0)
                 user_status_text = "You are ON TRACK 🎉"
                 user_status_subtext = f"Keep going! {remaining} task(s) remaining."
                 user_status_color = "text-green-600"
 
         user_status_view = {
-            "tasks_done": tasks_done_for_wager,
-            "tasks_total": total_tasks,
+            "tasks_done": current_user_tasks_done,
+            "tasks_total": current_user_tasks_total,
             "status_text": user_status_text,
             "status_subtext": user_status_subtext,
             "status_color": user_status_color,
-            "points_earned": points_earned,
-            "total_possible_points": total_possible_points,
+            "progress": current_user_progress,
+            "points_earned": current_user_points,
+            "total_possible_points": current_user_total_possible_points,
             "points_per_task": POINTS_PER_TASK,
-            "badge": badge,
+            "badge": current_user_badge,
             "required_tasks": get_required_tasks_for_wager(wager),
 
             # Backward-compatible keys for older templates.
-            "stake_frozen": total_possible_points,
-            "potential_reward": points_earned,
+            "stake_frozen": current_user_total_possible_points,
+            "potential_reward": current_user_points,
         }
 
         return wager_view, participants_view, user_status_view
 
     def build_dashboard_wager_card(user_id):
+        """Build the Dashboard active wager card for the current user."""
         today = date.today()
 
         wagers = (
@@ -357,7 +423,7 @@ def create_app():
         )
 
         for wager in wagers:
-            total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
+            total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
             if total_tasks > 0 and done_tasks >= total_tasks:
                 continue
@@ -371,14 +437,18 @@ def create_app():
             else:
                 time_remaining = "No deadline"
 
-            points_earned = calculate_wager_points(wager)
-            total_possible_points = total_tasks * POINTS_PER_TASK
+            user_total_tasks, user_done_tasks, user_progress_percent = (
+                calculate_wager_user_progress(wager, user_id)
+            )
+
+            points_earned = user_done_tasks * POINTS_PER_TASK
+            total_possible_points = user_total_tasks * POINTS_PER_TASK
 
             return {
                 "id": wager.id,
                 "title": wager.title,
                 "time_remaining": time_remaining,
-                "progress_percent": progress_percent,
+                "progress_percent": user_progress_percent,
                 "points_earned": points_earned,
                 "total_possible_points": total_possible_points,
                 "points_per_task": POINTS_PER_TASK,
