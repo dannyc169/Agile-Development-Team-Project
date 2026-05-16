@@ -142,7 +142,7 @@ def _build_active_wager_cards(team_id):
     if team_id is None:
         return []
 
-    today = date.today()
+    today = today_app_date()
     wagers = get_active_personal_wagers_for_user(
         current_user.id,
         team_ids=[team_id],
