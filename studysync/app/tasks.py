@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -15,6 +15,7 @@ from app.models import (
     is_team_leader,
     is_team_member,
 )
+from app.time_utils import now_app_time, parse_date_as_app_time
 from app.wager_helpers import sync_wagers_for_task
 
 
