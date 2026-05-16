@@ -111,14 +111,15 @@ def calculate_wager_points(wager):
     return done_tasks * POINTS_PER_TASK
 
 
-def calculate_wager_points_for_user(wager, user_id):
+def calculate_wager_user_progress(wager, user_id):
     """
-    Calculate points a specific user earned from one wager.
+    Calculate one user's personal progress for a wager.
 
-    Personal points are based only on the user's own completed linked tasks:
-    - assigned to the user, if the task has an assignee; or
-    - created by the user, only if the task has no assignee.
+    Personal progress uses the same attribution rule as personal points:
+    - assigned tasks count for the assignee only
+    - unassigned tasks count for the creator only
     """
+    personal_task_ids = set()
     completed_task_ids = set()
 
     for link in wager.linked_tasks:
@@ -127,15 +128,31 @@ def calculate_wager_points_for_user(wager, user_id):
         if linked_task is None:
             continue
 
-        if linked_task.status != "done":
-            continue
-
         if not user_owns_or_is_assigned_task(linked_task, user_id):
             continue
 
-        completed_task_ids.add(linked_task.id)
+        personal_task_ids.add(linked_task.id)
 
-    return len(completed_task_ids) * POINTS_PER_TASK
+        if linked_task.status == "done":
+            completed_task_ids.add(linked_task.id)
+
+    total_tasks = len(personal_task_ids)
+    done_tasks = len(completed_task_ids)
+
+    if total_tasks == 0:
+        return 0, 0, 0
+
+    progress_percent = min(100, int((done_tasks / total_tasks) * 100))
+    return total_tasks, done_tasks, progress_percent
+
+
+def calculate_wager_points_for_user(wager, user_id):
+    """Calculate points a specific user earned from one wager."""
+    _total_tasks, done_tasks, _progress_percent = calculate_wager_user_progress(
+        wager,
+        user_id,
+    )
+    return done_tasks * POINTS_PER_TASK
 
 
 def count_completed_linked_tasks_for_user(user_id, team_ids=None):
@@ -167,7 +184,7 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
 
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):
-    """Calculate participant status for a team-level wager."""
+    """Calculate participant status for a team-level or personal wager progress."""
     today = date.today()
 
     if tasks_total > 0 and tasks_done >= tasks_total:
@@ -230,20 +247,20 @@ def sync_wager_status(wager):
     This function only updates SQLAlchemy objects.
     The caller is responsible for db.session.commit().
 
-    Team progress is shared by all participants, but personal points are based
-    on each participant's own completed linked tasks.
+    Team status is shared at the wager level, but participant progress,
+    status, and rewards are based on each participant's own linked tasks.
     """
-    total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
+    total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
-    participant_status = calculate_participant_status(
+    team_status = calculate_participant_status(
         done_tasks,
         total_tasks,
         wager.end_date,
     )
 
-    if participant_status == "completed":
+    if team_status == "completed":
         wager_status = "completed"
-    elif participant_status == "failed":
+    elif team_status == "failed":
         wager_status = "failed"
     else:
         wager_status = "active"
@@ -255,17 +272,29 @@ def sync_wager_status(wager):
         changed = True
 
     for participant in wager.participants:
-        personal_points = calculate_wager_points_for_user(
+        (
+            personal_total_tasks,
+            personal_done_tasks,
+            personal_progress,
+        ) = calculate_wager_user_progress(
             wager,
             participant.user_id,
         )
 
-        if participant.progress != progress_percent:
-            participant.progress = progress_percent
+        personal_status = calculate_participant_status(
+            personal_done_tasks,
+            personal_total_tasks,
+            wager.end_date,
+        )
+
+        personal_points = personal_done_tasks * POINTS_PER_TASK
+
+        if participant.progress != personal_progress:
+            participant.progress = personal_progress
             changed = True
 
-        if participant.status != participant_status:
-            participant.status = participant_status
+        if participant.status != personal_status:
+            participant.status = personal_status
             changed = True
 
         if participant.reward_amount != personal_points:
