@@ -1,5 +1,3 @@
-from datetime import date
-
 from sqlalchemy import and_, or_
 
 from app import db
@@ -11,6 +9,7 @@ from app.models import (
     WagerParticipant,
     WagerTask,
 )
+from app.time_utils import today_app_date
 
 
 POINTS_PER_TASK = 10
@@ -186,7 +185,7 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):
     """Calculate participant status for team-level or personal wager progress."""
-    today = date.today()
+    today = today_app_date()
 
     if tasks_total > 0 and tasks_done >= tasks_total:
         return "completed"
