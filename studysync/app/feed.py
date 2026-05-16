@@ -1,7 +1,6 @@
-from datetime import date
-
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+
 from app import db
 from app.models import (
     Activity,
@@ -11,6 +10,7 @@ from app.models import (
     Team,
     TeamMember,
 )
+from app.time_utils import today_app_date
 from app.wager_helpers import (
     POINTS_PER_TASK,
     build_team_leaderboard,
@@ -20,7 +20,6 @@ from app.wager_helpers import (
 
 
 feed_bp = Blueprint("feed", __name__)
-
 
 def _current_user_team_ids():
     """Return team ids that the current user belongs to."""
