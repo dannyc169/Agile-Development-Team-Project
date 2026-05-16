@@ -13,3 +13,4 @@ instance/.env
 studysync/instance/*.db
 studysync/instance/*.sqlite3
 studysync/instance/*.db-journal
+studysync/e2e_artifacts/
