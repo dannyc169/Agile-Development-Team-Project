@@ -50,7 +50,7 @@ def create_team():
 		db.session.commit()
 		flash("Team created.", "success")
 		return redirect(url_for("teams.team_detail", team_id=team.id))
-	return render_template("teams/create.html", form=form)
+	"teams/create.html", form=form)
 
 
 @teams_bp.route("/join", methods=["GET", "POST"])
@@ -71,7 +71,7 @@ def join_team():
 		    db.session.commit()
 		    flash("Joined team successfully.", "success")
 		    return redirect(url_for("teams.team_detail", team_id=team.id))
-	return render_template("teams/join.html", form=form)
+	"teams/join.html", form=form)
 
 
 @teams_bp.route("/<int:team_id>")
@@ -178,7 +178,7 @@ def team_detail(team_id):
 			).all()
 		}
 
-	return render_template(
+	
 		"teams/detail.html",
 		team=team,
 		member_rows=member_rows,
@@ -312,6 +312,8 @@ def member_tasks(team_id, user_id):
 	done_tasks = [task for task in member_tasks_list if task.status == "done"]
 	
 	total_tasks = len(member_tasks_list)
+
+	is_leader = is_team_leader(team.id, current_user.id)
 	
 	return render_template(
 		"teams/member_tasks.html",
