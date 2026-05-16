@@ -697,7 +697,22 @@ def create_app():
             "completed": [],
             "failed": [],
         }
-        participant_overview = build_participant_status_overview(wagers)
+        
+        overview_team_ids = list(allowed_team_ids)
+
+        if selected_team_id is not None:
+            overview_team_ids = [selected_team_id]
+        
+        overview_wagers = []
+        
+        if overview_team_ids:
+            overview_wagers = (
+                Wager.query.filter(Wager.team_id.in_(overview_team_ids))
+                .order_by(Wager.created_at.desc())
+                .all()
+            )
+        
+        participant_overview = build_participant_status_overview(overview_wagers)
     
         for wager in wagers:
             wager_view, participants_view, user_status_view = build_wager_view_data(wager)
