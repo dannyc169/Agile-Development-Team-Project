@@ -21,6 +21,21 @@ from app.wager_helpers import sync_wagers_for_task
 tasks_bp = Blueprint("tasks", __name__)
 
 
+def redirect_after_task_action(default_endpoint="tasks.task_list"):
+    """
+    Redirect back to the page where the task action was submitted from.
+
+    This keeps leaders on the My Teams member task page after editing tasks
+    or managing subtasks there. Only internal relative paths are allowed.
+    """
+    return_to = request.form.get("return_to", "").strip()
+
+    if return_to.startswith("/") and not return_to.startswith("//"):
+        return redirect(return_to)
+
+    return redirect(url_for(default_endpoint))
+
+
 def can_manage_task(task, user_id):
     """
     Return whether the user can edit or delete this task.
@@ -114,7 +129,7 @@ def handle_task_status_change(task, old_status):
     """
     Handle side effects when task.status changes.
 
-    This is the correct place to sync related wagers.
+    This is the correct place to create activity records and sync linked wagers.
     GET pages should only read data and should not commit sync changes.
     """
     if task.status == old_status:
@@ -299,25 +314,25 @@ def edit_task(task_id):
 
     if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     title = request.form.get("title", "").strip()
     if not title:
         flash("Task title is required.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     team_id, err = validate_team_id(request.form.get("team_id"))
     if err:
         flash(err, "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     if not team_id:
         flash("Tasks must be assigned to a team.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     if not is_team_leader(team_id, current_user.id):
         flash("Only team leaders can assign tasks to a team.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -339,7 +354,7 @@ def edit_task(task_id):
             ).replace(tzinfo=timezone.utc)
         except ValueError:
             flash("Invalid date format.", "error")
-            return redirect(url_for("tasks.task_list"))
+            return redirect_after_task_action()
     else:
         task.due_date = None
 
@@ -348,7 +363,7 @@ def edit_task(task_id):
     db.session.commit()
 
     flash("Task updated!", "success")
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/status", methods=["POST"])
@@ -358,7 +373,7 @@ def update_status(task_id):
 
     if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
     new_status = request.form.get("status")
@@ -368,7 +383,7 @@ def update_status(task_id):
         handle_task_status_change(task, old_status)
         db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/delete", methods=["POST"])
@@ -378,13 +393,13 @@ def delete_task(task_id):
 
     if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     db.session.delete(task)
     db.session.commit()
 
     flash("Task deleted.", "success")
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 def _sync_task_status(task):
@@ -412,11 +427,11 @@ def add_subtask(task_id):
 
     if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     title = request.form.get("title", "").strip()
     if not title:
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -428,7 +443,7 @@ def add_subtask(task_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/toggle", methods=["POST"])
@@ -438,13 +453,13 @@ def toggle_subtask(task_id, subtask_id):
 
     if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     subtask = Subtask.query.get_or_404(subtask_id)
 
     if subtask.task_id != task_id:
         flash("Not found.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -454,7 +469,7 @@ def toggle_subtask(task_id, subtask_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/delete", methods=["POST"])
@@ -464,13 +479,13 @@ def delete_subtask(task_id, subtask_id):
 
     if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     subtask = Subtask.query.get_or_404(subtask_id)
 
     if subtask.task_id != task_id:
         flash("Not found.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -482,4 +497,4 @@ def delete_subtask(task_id, subtask_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
