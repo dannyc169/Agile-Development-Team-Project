@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
 {% block title %}My Tasks - UWA StudySync{% endblock %}
 {% block page_title %}My Tasks{% endblock %}
 
@@ -65,7 +69,7 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-          <input type="date" name="due_date" lang="en"
+          <input type="text" name="due_date" id="createDueDate" placeholder="YYYY-MM-DD"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
         </div>
         <div>
@@ -325,7 +329,7 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-          <input type="date" name="due_date" id="editDueDate" lang="en"
+          <input type="text" name="due_date" id="editDueDate" placeholder="YYYY-MM-DD"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
         </div>
         <div>
@@ -380,7 +384,12 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script type="application/json" id="teamMembersData">{{ team_members_map | tojson }}</script>
+<script>
+  const createDueDatePicker = flatpickr("#createDueDate", { dateFormat: "Y-m-d", allowInput: true });
+  const editDueDatePicker   = flatpickr("#editDueDate",   { dateFormat: "Y-m-d", allowInput: true });
+</script>
 <script>
   // New Task panel — only rendered for leaders
   const newTaskBtn = document.getElementById('newTaskBtn');
@@ -495,7 +504,7 @@
       editForm.action = `/tasks/${id}/edit`;
       document.getElementById('editTitle').value = this.dataset.title;
       document.getElementById('editDescription').value = this.dataset.description;
-      document.getElementById('editDueDate').value = this.dataset.dueDate;
+      editDueDatePicker.setDate(this.dataset.dueDate || null);
       editPriority.value = this.dataset.priority;
       document.getElementById('editStatus').value = this.dataset.status;
       document.getElementById('editTeamId').value = this.dataset.teamId;
