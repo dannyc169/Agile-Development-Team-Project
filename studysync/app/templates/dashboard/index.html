@@ -185,25 +185,36 @@
                 </div>
             </div>
 
-            <!-- Team Progress Card (static for now, person 3 responsible) -->
+            <!-- Team Progress Card -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-bold text-gray-900 mb-4">Team Progress</h2>
-
-                {% if teams %}
-                <div class="space-y-5">
-                    {% set bar_colors = ['bg-indigo-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-teal-500'] %}
-
-                    {% for team in teams %}
+                <div class="flex items-center justify-between mb-4">
                     <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <h3 class="font-semibold text-gray-900 text-sm">{{ team.name }}</h3>
-                            <span class="text-xs font-bold text-gray-600">
-                                {{ team.members | length }} members
+                        <h2 class="text-lg font-bold text-gray-900">Team Progress</h2>
+                        <p class="text-sm text-gray-500 mt-1">Task completion across your teams</p>
+                    </div>
+                    <i class="fas fa-chart-line text-indigo-500 text-lg"></i>
+                </div>
+
+                {% if team_progress_rows %}
+                <div class="space-y-5">
+                    {% for row in team_progress_rows %}
+                    <div>
+                        <div class="flex items-center justify-between mb-2 gap-4">
+                            <div>
+                                <h3 class="font-semibold text-gray-900 text-sm">{{ row.team_name }}</h3>
+                                <p class="text-xs text-gray-500">
+                                    {{ row.completed_tasks }}/{{ row.total_tasks }} tasks completed
+                                </p>
+                            </div>
+                            <span class="text-sm font-bold text-indigo-600 whitespace-nowrap">
+                                {{ row.progress_percent }}%
                             </span>
                         </div>
 
                         <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="{{ bar_colors[loop.index0 % 5] }} h-2 rounded-full" style="width: 50%"></div>
+                            <div class="bg-indigo-500 h-2 rounded-full"
+                                 style="width: {{ row.progress_percent }}%;">
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -213,7 +224,7 @@
                 <div class="text-center py-8 text-gray-400">
                     <i class="fas fa-people-group text-3xl mb-2"></i>
                     <p class="text-sm">
-                        No teams yet.
+                        No team progress available yet.
                         <a href="/teams/join" class="text-indigo-600">Join a team</a>
                     </p>
                 </div>
@@ -225,26 +236,44 @@
         <!-- RIGHT COLUMN -->
         <div class="space-y-6">
 
-            <!-- Recent Activity Card (static, person 3 responsible) -->
+            <!-- Recent Activity Card -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-bold text-gray-900 mb-4">Recent Activity</h2>
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">Recent Activity</h2>
+                        <p class="text-sm text-gray-500 mt-1">Latest updates from your teams</p>
+                    </div>
+                    <i class="fas fa-bolt text-indigo-500 text-lg"></i>
+                </div>
 
+                {% if recent_activities %}
                 <div class="space-y-4">
+                    {% for activity in recent_activities %}
                     <div class="flex items-start gap-3">
                         <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                            {{ current_user.username[:1] | upper }}
+                            {{ activity.actor_initial }}
                         </div>
 
                         <div class="flex-1 min-w-0">
                             <p class="text-sm text-gray-900">
-                                <span class="font-semibold">{{ current_user.username }}</span> is logged in
+                                {{ activity.message }}
                             </p>
-                            <p class="text-xs text-gray-500">Just now</p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                {{ activity.team_name }}
+                            </p>
                         </div>
 
                         <i class="fas fa-bolt text-indigo-500 text-sm flex-shrink-0 mt-1"></i>
                     </div>
+                    {% endfor %}
                 </div>
+
+                {% else %}
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-bolt text-3xl mb-2"></i>
+                    <p class="text-sm">No recent activity yet.</p>
+                </div>
+                {% endif %}
             </div>
 
             <!-- Active Wager Card -->
