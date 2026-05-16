@@ -60,8 +60,8 @@
         <span>No due date</span>
         {% endif %}
 
-        {% if task.assignee %}
-        <span>Assigned to {{ task.assignee.username }}</span>
+        {% if task.assigned_to_user %}
+        <span>Assigned to {{ task.assigned_to_user.username }}</span>
         {% endif %}
     </div>
 
