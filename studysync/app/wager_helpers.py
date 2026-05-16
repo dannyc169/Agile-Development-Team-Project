@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app import db
 from app.models import (
@@ -18,18 +18,19 @@ POINTS_PER_TASK = 10
 
 def _task_user_filter(user_id):
     """
-    Match tasks that belong to a user.
+    Match tasks that should count as this user's own contribution.
 
-    This includes:
-    - tasks created by the user
-    - tasks assigned to the user, if assigned_to_user_id exists in the model
+    Rule:
+    - If a task is assigned to someone, only the assignee gets the points.
+    - If a task has no assignee, the creator gets the points.
     """
-    filters = [Task.user_id == user_id]
-
-    if hasattr(Task, "assigned_to_user_id"):
-        filters.append(Task.assigned_to_user_id == user_id)
-
-    return or_(*filters)
+    return or_(
+        Task.assigned_to_user_id == user_id,
+        and_(
+            Task.assigned_to_user_id.is_(None),
+            Task.user_id == user_id,
+        ),
+    )
 
 
 def user_owns_or_is_assigned_task(task, user_id):
@@ -37,14 +38,12 @@ def user_owns_or_is_assigned_task(task, user_id):
     if task is None:
         return False
 
-    if task.user_id == user_id:
-        return True
-
     assigned_to_user_id = getattr(task, "assigned_to_user_id", None)
-    if assigned_to_user_id == user_id:
-        return True
 
-    return False
+    if assigned_to_user_id is not None:
+        return assigned_to_user_id == user_id
+
+    return task.user_id == user_id
 
 
 def resolve_linked_task(link, wager):
@@ -117,8 +116,8 @@ def calculate_wager_points_for_user(wager, user_id):
     Calculate points a specific user earned from one wager.
 
     Personal points are based only on the user's own completed linked tasks:
-    - created by the user, or
-    - assigned to the user if assigned_to_user_id exists.
+    - assigned to the user, if the task has an assignee; or
+    - created by the user, only if the task has no assignee.
     """
     completed_task_ids = set()
 
@@ -144,7 +143,7 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
     Count completed linked tasks that belong to a user.
 
     This is used for leaderboard and personal points.
-    It counts tasks created by the user and assigned to the user.
+    It counts assigned tasks for the assignee, and unassigned tasks for the creator.
     """
     query = (
         db.session.query(Task.id)
