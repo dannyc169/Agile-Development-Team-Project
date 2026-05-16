@@ -84,10 +84,15 @@ def validate_priority(priority):
 
 
 def format_status_label(status):
-    """Return a user-friendly task status label."""
+    """
+    Return a user-friendly task status label.
+
+    in_progress is treated as Todo for backward compatibility with older data.
+    The app no longer uses a separate in_progress task flow.
+    """
     labels = {
         "todo": "Todo",
-        "in_progress": "In Progress",
+        "in_progress": "Todo",
         "done": "Done",
     }
 
@@ -396,7 +401,13 @@ def delete_task(task_id):
 
 
 def _sync_task_status(task):
-    """Sync parent task status based on subtask completion."""
+    """
+    Sync parent task status based on subtask completion.
+
+    The app no longer uses a separate in_progress task state:
+    - if all subtasks are done, the task becomes done
+    - otherwise, the task remains todo
+    """
     subtasks = task.subtasks
 
     if not subtasks:
@@ -405,12 +416,10 @@ def _sync_task_status(task):
 
     done_count = sum(1 for subtask in subtasks if subtask.is_done)
 
-    if done_count == 0:
-        task.status = "todo"
-    elif done_count == len(subtasks):
+    if done_count == len(subtasks):
         task.status = "done"
     else:
-        task.status = "in_progress"
+        task.status = "todo"
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks", methods=["POST"])
