@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, date, timezone
+from datetime import datetime
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_login import (
@@ -13,6 +13,7 @@ from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
+from app.time_utils import today_app_date
 from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
 
 
@@ -184,7 +185,7 @@ def create_app():
         team_tasks_total,
     ):
         """Return the overall wager status based on team-level progress."""
-        today = date.today()
+        today = today_app_date()
 
         if team_tasks_total > 0 and team_tasks_done >= team_tasks_total:
             return "completed"
@@ -247,7 +248,7 @@ def create_app():
             )
             current_user_badge = get_badge_for_points(current_user_points)
 
-        today = date.today()
+        today = today_app_date()
 
         participants_view = []
         status_counts = {
@@ -520,7 +521,7 @@ def create_app():
 
     def build_dashboard_wager_card(user_id):
         """Build the Dashboard active wager card for the current user's own wagers."""
-        today = date.today()
+        today = today_app_date()
 
         # Dashboard is a personal page. Even leaders should only see wagers that
         # are personally relevant to them here, not every team member's wager.
