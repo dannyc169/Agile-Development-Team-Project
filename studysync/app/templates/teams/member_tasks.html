@@ -17,15 +17,15 @@
 {% endmacro %}
 
 {% macro status_badge(status) %}
+{# The app treats every non-done task as Todo. This keeps old in_progress data visible. #}
+{% set display_status = 'done' if status == 'done' else 'todo' %}
 <span class="text-xs font-semibold rounded-full px-2 py-1
-    {% if status == 'done' %}
+    {% if display_status == 'done' %}
         bg-green-100 text-green-700
-    {% elif status == 'in_progress' %}
-        bg-indigo-100 text-indigo-700
     {% else %}
         bg-gray-100 text-gray-700
     {% endif %}">
-    {{ status.replace('_', ' ')|title }}
+    {{ 'Done' if display_status == 'done' else 'Todo' }}
 </span>
 {% endmacro %}
 
@@ -184,7 +184,7 @@
     {% endif %}
 
     <!-- Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <p class="text-xs text-gray-500">Total Tasks</p>
             <p class="text-2xl font-bold text-gray-900">{{ total_tasks }}</p>
@@ -196,18 +196,13 @@
         </div>
 
         <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-            <p class="text-xs text-gray-500">In Progress</p>
-            <p class="text-2xl font-bold text-indigo-600">{{ in_progress_tasks|length }}</p>
-        </div>
-
-        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <p class="text-xs text-gray-500">Done</p>
             <p class="text-2xl font-bold text-green-600">{{ done_tasks|length }}</p>
         </div>
     </div>
 
     <!-- Member Task Board -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         <!-- Todo -->
         <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -222,18 +217,6 @@
             </div>
         </div>
 
-        <!-- In Progress -->
-        <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-            <h2 class="font-bold text-gray-900 mb-4">In Progress</h2>
-
-            <div class="space-y-3">
-                {% for task in in_progress_tasks %}
-                    {{ render_task_card(task, 'border-indigo-100') }}
-                {% else %}
-                    <p class="text-sm text-gray-500">No tasks in progress.</p>
-                {% endfor %}
-            </div>
-        </div>
 
         <!-- Done -->
         <div class="rounded-xl border border-green-200 bg-green-50 p-4">
