@@ -248,7 +248,7 @@
                     </div>
                 </div>
                 
-                <!-- Remember Me & Forgot Password -->
+                <!-- Remember Me -->
                 <div class="flex items-center justify-between pt-2">
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input 
@@ -258,9 +258,8 @@
                         >
                         <span class="text-sm text-gray-700">Remember me</span>
                     </label>
-                    <a href="#" class="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
-                        Forgot password?
-                    </a>
+                    {# Password reset is disabled for MVP because secure email/token verification is not implemented. #}
+                    {# <a href="{{ url_for('auth.reset_password') }}">Forgot password?</a> #}
                 </div>
                 
                 <!-- Submit Button -->
