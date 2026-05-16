@@ -636,54 +636,93 @@ def create_app():
     @app.route("/wagers")
     @login_required
     def wagers_detail():
-        """Display the Wager page with personal and leader-only team views.
-
-        Default view:
-        - Everyone sees only their own wagers.
-
-        Leader-only Team Members view:
-        - Leaders can switch to view all wagers from teams they lead.
-        - This broader view is only available on the Wager page.
+        """Display the Wager page with scope and team filters.
+    
+        Scope rules:
+        - Personal: everyone sees only their own wagers.
+        - Team Members: leaders can view all wagers from teams they lead.
+    
+        Team filter rules:
+        - Personal scope: filter by teams the current user belongs to.
+        - Team Members scope: filter by teams the current user leads.
         """
         requested_scope = request.args.get("scope", "personal")
+        selected_team_raw = request.args.get("team_id", "all")
+    
         can_view_team_wagers = user_can_view_team_wagers(current_user.id)
-
+    
+        memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
+        all_user_teams = [membership.team for membership in memberships]
+        leader_team_ids = {
+            membership.team_id
+            for membership in memberships
+            if membership.role == "leader"
+        }
+    
         if requested_scope == "team" and can_view_team_wagers:
             scope = "team"
+            team_filter_teams = [
+                team for team in all_user_teams
+                if team and team.id in leader_team_ids
+            ]
             wagers = get_team_wagers_for_leader(current_user.id)
         else:
             scope = "personal"
+            team_filter_teams = [
+                team for team in all_user_teams
+                if team is not None
+            ]
             wagers = get_personal_wagers_for_user(current_user.id)
-
+    
+        allowed_team_ids = {team.id for team in team_filter_teams}
+        selected_team_id = None
+    
+        if selected_team_raw and selected_team_raw != "all":
+            try:
+                candidate_team_id = int(selected_team_raw)
+    
+                if candidate_team_id in allowed_team_ids:
+                    selected_team_id = candidate_team_id
+            except ValueError:
+                selected_team_id = None
+    
+        if selected_team_id is not None:
+            wagers = [
+                wager for wager in wagers
+                if wager.team_id == selected_team_id
+            ]
+    
         sections = {
             "active": [],
             "completed": [],
             "failed": [],
         }
         participant_overview = build_participant_status_overview(wagers)
-
+    
         for wager in wagers:
             wager_view, participants_view, user_status_view = build_wager_view_data(wager)
-
+    
             item = {
                 "wager": wager_view,
                 "participants": participants_view,
                 "user_status": user_status_view,
             }
-
+    
             if wager_view["status_key"] == "completed":
                 sections["completed"].append(item)
             elif wager_view["status_key"] == "failed":
                 sections["failed"].append(item)
             else:
                 sections["active"].append(item)
-
+    
         return render_template(
             "wagers/detail.html",
             sections=sections,
             participant_overview=participant_overview,
             scope=scope,
             can_view_team_wagers=can_view_team_wagers,
+            team_filter_teams=team_filter_teams,
+            selected_team_id=selected_team_id,
         )
 
     @app.route("/wagers/create", methods=["GET", "POST"])
