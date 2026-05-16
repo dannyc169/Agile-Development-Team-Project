@@ -78,6 +78,7 @@ def create_app():
         get_badge_for_points,
         resolve_linked_task,
         sync_wager_status,
+        user_owns_or_is_assigned_task,
     )
 
     app.register_blueprint(teams_bp)
@@ -119,6 +120,7 @@ def create_app():
             "completed": "bg-green-100 text-green-700",
             "at_risk": "bg-yellow-200 text-yellow-800",
             "failed": "bg-red-200 text-red-800",
+            "no_tasks": "bg-gray-100 text-gray-600",
         }
 
         return mapping.get(status, "bg-gray-100 text-gray-700")
@@ -129,6 +131,7 @@ def create_app():
             "completed": "bg-green-500",
             "at_risk": "bg-yellow-500",
             "failed": "bg-red-500",
+            "no_tasks": "bg-gray-300",
         }
 
         return mapping.get(status, "bg-gray-400")
@@ -411,6 +414,106 @@ def create_app():
 
         return wager_view, participants_view, user_status_view
 
+    def build_participant_status_overview(wagers):
+        """Build one page-level participant status overview.
+
+        The overview aggregates each participant's own linked tasks across the
+        wagers visible to the current user. Assigned tasks count only for the
+        assignee, while unassigned tasks count for the creator.
+        """
+        participant_map = {}
+
+        for wager in wagers:
+            for participant in wager.participants:
+                user = participant.user
+
+                if user is None:
+                    continue
+
+                if user.id not in participant_map:
+                    participant_map[user.id] = {
+                        "user_id": user.id,
+                        "name": user.username,
+                        "avatar": user.username[:1].upper() if user.username else "?",
+                        "_task_ids": set(),
+                        "_done_task_ids": set(),
+                    }
+
+            for link in wager.linked_tasks:
+                linked_task = resolve_linked_task(link, wager)
+
+                if linked_task is None:
+                    continue
+
+                for participant in wager.participants:
+                    user = participant.user
+
+                    if user is None:
+                        continue
+
+                    if not user_owns_or_is_assigned_task(linked_task, user.id):
+                        continue
+
+                    participant_map[user.id]["_task_ids"].add(linked_task.id)
+
+                    if linked_task.status == "done":
+                        participant_map[user.id]["_done_task_ids"].add(
+                            linked_task.id
+                        )
+
+        rows = []
+
+        for item in participant_map.values():
+            tasks_total = len(item["_task_ids"])
+            tasks_done = len(item["_done_task_ids"])
+            points = tasks_done * POINTS_PER_TASK
+            badge = get_badge_for_points(points)
+
+            if tasks_total == 0:
+                progress = 0
+                status_key = "no_tasks"
+                status_label = "No Tasks"
+            elif tasks_done >= tasks_total:
+                progress = 100
+                status_key = "completed"
+                status_label = "Completed"
+            else:
+                progress = min(100, int((tasks_done / tasks_total) * 100))
+                status_key = "on_track"
+                status_label = "In Progress"
+
+            rows.append(
+                {
+                    "user_id": item["user_id"],
+                    "name": item["name"],
+                    "avatar": item["avatar"],
+                    "tasks_done": tasks_done,
+                    "tasks_total": tasks_total,
+                    "progress": progress,
+                    "status": status_label,
+                    "status_class": participant_status_class(status_key),
+                    "points": points,
+                    "badge": badge,
+                    "row_class": "",
+                    "name_class": "text-gray-900",
+                    "done_class": "text-gray-600",
+                    "progress_class": participant_progress_class(status_key),
+                }
+            )
+
+        rows.sort(
+            key=lambda row: (
+                -row["points"],
+                -row["tasks_done"],
+                row["name"].lower(),
+            )
+        )
+
+        for index, row in enumerate(rows):
+            row["avatar_color"] = avatar_color_for_index(index)
+
+        return rows
+
     def build_dashboard_wager_card(user_id):
         """Build the Dashboard active wager card for the current user."""
         today = date.today()
@@ -495,7 +598,7 @@ def create_app():
                 Task.assigned_to_user_id == current_user.id,
                 and_(
                     Task.user_id == current_user.id,
-                    Task.assigned_to_user_id == None,
+                    Task.assigned_to_user_id.is_(None),
                 ),
             )
         ).all()
@@ -548,6 +651,7 @@ def create_app():
             "completed": [],
             "failed": [],
         }
+        participant_overview = build_participant_status_overview(wagers)
 
         for wager in wagers:
             wager_view, participants_view, user_status_view = build_wager_view_data(wager)
@@ -568,6 +672,7 @@ def create_app():
         return render_template(
             "wagers/detail.html",
             sections=sections,
+            participant_overview=participant_overview,
         )
 
     @app.route("/wagers/create", methods=["GET", "POST"])
