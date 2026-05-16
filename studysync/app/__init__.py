@@ -14,7 +14,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
 from app.time_utils import now_app_time, today_app_date
-from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
+from app.forms import LoginForm, RegisterForm, ResetPasswordForm
 
 
 db = SQLAlchemy()
@@ -1171,29 +1171,23 @@ def create_app():
 
     @app.route("/reset-password", methods=["GET", "POST"])
     def reset_password():
+        """
+        Disable public password reset for the MVP.
+    
+        A secure reset flow requires email/token verification. The previous
+        demo-style reset allowed passwords to be changed with only a username
+        or email, which creates an account takeover risk.
+        """
+        flash(
+            "Password reset is not available in the MVP. "
+            "If you can log in, please change your password from Account settings.",
+            "info",
+        )
+    
         if current_user.is_authenticated:
             return redirect(url_for("dashboard"))
-
-        form = ResetPasswordForm()
-
-        if form.validate_on_submit():
-            identifier = form.username_or_email.data.strip()
-
-            user = User.query.filter_by(username=identifier).first()
-            if user is None:
-                user = User.query.filter_by(email=identifier).first()
-
-            if user is None:
-                flash("User not found.", "error")
-                return render_template("auth/reset_password.html", form=form)
-
-            user.set_password(form.new_password.data)
-            db.session.commit()
-
-            flash("Password updated, please login.", "success")
-            return redirect(url_for("login"))
-
-        return render_template("auth/reset_password.html", form=form)
+    
+        return redirect(url_for("login"))
 
     @app.route("/health")
     def health():
