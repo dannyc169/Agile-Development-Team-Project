@@ -362,21 +362,17 @@ def get_personal_wagers_for_user(user_id, team_ids=None):
     """
     Return wagers that personally belong to the user.
 
-    A personal wager means:
-    - the user is a wager participant; or
-    - the user created the wager.
+    A personal wager means the user has at least one linked task in the wager:
+    - assigned tasks belong to the assignee only
+    - unassigned tasks belong to the creator only
 
-    This avoids showing every wager from a team just because the user is a
-    member of that team.
+    This avoids showing every team wager just because the user is a team member
+    or was added as a wager participant.
     """
-    query = Wager.query.outerjoin(
-        WagerParticipant,
-        WagerParticipant.wager_id == Wager.id,
-    ).filter(
-        or_(
-            WagerParticipant.user_id == user_id,
-            Wager.creator_id == user_id,
-        )
+    query = (
+        Wager.query.join(WagerTask, WagerTask.wager_id == Wager.id)
+        .join(Task, Task.id == WagerTask.task_id)
+        .filter(_task_user_filter(user_id))
     )
 
     if team_ids is not None:
@@ -395,15 +391,13 @@ def get_active_personal_wagers_for_user(user_id, team_ids=None):
     This should be used by personal pages such as Dashboard and Activity Feed.
     Leaders should still only see their own active wagers on those pages.
     """
-    query = Wager.query.outerjoin(
-        WagerParticipant,
-        WagerParticipant.wager_id == Wager.id,
-    ).filter(
-        or_(
-            WagerParticipant.user_id == user_id,
-            Wager.creator_id == user_id,
-        ),
-        Wager.status == "active",
+    query = (
+        Wager.query.join(WagerTask, WagerTask.wager_id == Wager.id)
+        .join(Task, Task.id == WagerTask.task_id)
+        .filter(
+            Wager.status == "active",
+            _task_user_filter(user_id),
+        )
     )
 
     if team_ids is not None:
