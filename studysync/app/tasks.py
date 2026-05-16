@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app import db
 from app.models import Activity, Notification, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
@@ -104,8 +104,11 @@ def task_list():
         Task.query
         .filter(
             or_(
-                Task.user_id == current_user.id,
                 Task.assigned_to_user_id == current_user.id,
+                and_(
+                    Task.user_id == current_user.id,
+                    Task.assigned_to_user_id == None,
+                ),
             )
         )
         .order_by(Task.due_date.asc(), Task.created_at.asc())

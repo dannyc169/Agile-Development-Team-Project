@@ -131,7 +131,8 @@
     <div class="bg-white border-l-4 {{ border_color }} rounded-lg p-4 hover:shadow-md transition-shadow task-card"
       data-status="{{ task.status }}"
       data-title="{{ task.title | lower }}"
-      data-team-id="{{ task.team_id or 'personal' }}">
+      data-team-id="{{ task.team_id or 'personal' }}"
+      data-assigned-to-me="{{ 'true' if task.assigned_to_user_id == current_user.id else 'false' }}">
       <div class="flex items-start gap-4">
 
         <!-- Status dot -->
@@ -348,7 +349,7 @@
           <input type="hidden" id="editPriorityHidden" name="priority" disabled>
         </div>
       </div>
-      <div>
+      <div id="editStatusField">
         <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
         <select name="status" id="editStatus"
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
@@ -454,10 +455,22 @@
 
   function applyFilters() {
     document.querySelectorAll('.task-card').forEach(card => {
-      const matchFilter = currentFilter === 'all' || card.dataset.status === currentFilter;
+      let matchFilter;
+      if (currentFilter === 'all') {
+        matchFilter = true;
+      } else {
+        matchFilter = card.dataset.status === currentFilter;
+      }
       const matchSearch = card.dataset.title.includes(currentSearch);
       const matchTeam = currentTeam === 'all' || card.dataset.teamId === currentTeam;
       card.style.display = (matchFilter && matchSearch && matchTeam) ? '' : 'none';
+    });
+
+    ['overdue-section', 'today-section', 'upcoming-section', 'done-section'].forEach(id => {
+      const section = document.getElementById(id);
+      if (!section) return;
+      const hasVisible = Array.from(section.querySelectorAll('.task-card')).some(c => c.style.display !== 'none');
+      section.style.display = hasVisible ? '' : 'none';
     });
   }
 
@@ -510,6 +523,7 @@
       document.getElementById('editTeamId').value = this.dataset.teamId;
 
       const isAssignee = this.dataset.isAssignee === '1';
+      document.getElementById('editStatusField').classList.toggle('hidden', isAssignee);
       editPriority.disabled = isAssignee;
       editPriority.classList.toggle('opacity-50', isAssignee);
       editPriority.classList.toggle('cursor-not-allowed', isAssignee);
