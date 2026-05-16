@@ -75,9 +75,13 @@ def create_app():
         calculate_wager_progress,
         calculate_wager_user_progress,
         count_wagers_won_for_user,
+        get_active_personal_wagers_for_user,
         get_badge_for_points,
+        get_personal_wagers_for_user,
+        get_team_wagers_for_leader,
         resolve_linked_task,
         sync_wager_status,
+        user_can_view_team_wagers,
         user_owns_or_is_assigned_task,
     )
 
@@ -515,15 +519,12 @@ def create_app():
         return rows
 
     def build_dashboard_wager_card(user_id):
-        """Build the Dashboard active wager card for the current user."""
+        """Build the Dashboard active wager card for the current user's own wagers."""
         today = date.today()
 
-        wagers = (
-            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-            .filter(TeamMember.user_id == user_id)
-            .order_by(Wager.created_at.desc())
-            .all()
-        )
+        # Dashboard is a personal page. Even leaders should only see wagers that
+        # are personally relevant to them here, not every team member's wager.
+        wagers = get_active_personal_wagers_for_user(user_id)
 
         for wager in wagers:
             total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
@@ -635,16 +636,24 @@ def create_app():
     @app.route("/wagers")
     @login_required
     def wagers_detail():
-        wagers = (
-            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-            .filter(TeamMember.user_id == current_user.id)
-            .order_by(Wager.created_at.desc())
-            .all()
-        )
+        """Display the Wager page with personal and leader-only team views.
 
-        if not wagers:
-            flash("No wager exists yet. Please create one first.", "info")
-            return redirect(url_for("create_wager"))
+        Default view:
+        - Everyone sees only their own wagers.
+
+        Leader-only Team Members view:
+        - Leaders can switch to view all wagers from teams they lead.
+        - This broader view is only available on the Wager page.
+        """
+        requested_scope = request.args.get("scope", "personal")
+        can_view_team_wagers = user_can_view_team_wagers(current_user.id)
+
+        if requested_scope == "team" and can_view_team_wagers:
+            scope = "team"
+            wagers = get_team_wagers_for_leader(current_user.id)
+        else:
+            scope = "personal"
+            wagers = get_personal_wagers_for_user(current_user.id)
 
         sections = {
             "active": [],
@@ -673,6 +682,8 @@ def create_app():
             "wagers/detail.html",
             sections=sections,
             participant_overview=participant_overview,
+            scope=scope,
+            can_view_team_wagers=can_view_team_wagers,
         )
 
     @app.route("/wagers/create", methods=["GET", "POST"])
