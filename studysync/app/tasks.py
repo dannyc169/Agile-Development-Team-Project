@@ -143,7 +143,7 @@ def handle_task_status_change(task, old_status):
 @tasks_bp.route("/todos")
 @login_required
 def task_list():
-    now = datetime.now(timezone.utc)
+    now = now_app_time()
 
     tasks = (
         Task.query.filter(
@@ -240,10 +240,7 @@ def create_task():
     due_date = None
     if due_date_str:
         try:
-            due_date = datetime.strptime(
-                due_date_str,
-                "%Y-%m-%d",
-            ).replace(tzinfo=timezone.utc)
+            due_date = parse_date_as_app_time(due_date_str)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
@@ -349,10 +346,7 @@ def edit_task(task_id):
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
         try:
-            task.due_date = datetime.strptime(
-                due_date_str,
-                "%Y-%m-%d",
-            ).replace(tzinfo=timezone.utc)
+            task.due_date = parse_date_as_app_time(due_date_str)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect_after_task_action()
