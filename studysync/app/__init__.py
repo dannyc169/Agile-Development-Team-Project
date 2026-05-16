@@ -13,7 +13,7 @@ from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
-from app.time_utils import today_app_date
+from app.time_utils import now_app_time, today_app_date
 from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
 
 
@@ -592,7 +592,7 @@ def create_app():
     @app.route("/dashboard")
     @login_required
     def dashboard():
-        now = datetime.now(timezone.utc)
+        now = now_app_time()
         today = now.date()
 
         all_tasks = Task.query.filter(
