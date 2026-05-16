@@ -2,8 +2,6 @@ from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
-
 from app import db
 from app.models import (
     Activity,
@@ -12,13 +10,12 @@ from app.models import (
     Notification,
     Team,
     TeamMember,
-    Wager,
 )
 from app.wager_helpers import (
     POINTS_PER_TASK,
     build_team_leaderboard,
-    calculate_wager_points,
-    calculate_wager_progress,
+    calculate_wager_user_progress,
+    get_active_personal_wagers_for_user,
 )
 
 
@@ -135,27 +132,48 @@ def _add_feed_display_fields(leaderboard):
 
 
 def _build_active_wager_cards(team_id):
-    """Build active wager cards for the selected team only."""
+    """Build personal active wager cards for the selected team.
+
+    Activity Feed is a personal page. Even if the current user is a team
+    leader, this sidebar should only show wagers that belong to the current
+    user in the selected team. Team-wide wager management stays on the Wager
+    page's Team Members view.
+    """
     if team_id is None:
         return []
 
     today = date.today()
-
-    wagers = (
-        Wager.query.filter(Wager.team_id == team_id)
-        .order_by(Wager.created_at.desc())
-        .all()
+    wagers = get_active_personal_wagers_for_user(
+        current_user.id,
+        team_ids=[team_id],
     )
 
     active_wagers = []
+
+    theme_options = [
+        {
+            "container_class": "border border-indigo-200 bg-indigo-50",
+            "badge_class": "bg-indigo-600 text-white",
+        },
+        {
+            "container_class": "border border-purple-200 bg-purple-50",
+            "badge_class": "bg-purple-600 text-white",
+        },
+        {
+            "container_class": "border border-orange-200 bg-orange-50",
+            "badge_class": "bg-orange-500 text-white",
+        },
+    ]
 
     for wager in wagers:
         if wager.end_date and wager.end_date < today:
             continue
 
-        total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
+        user_tasks_total, user_tasks_done, user_progress_percent = (
+            calculate_wager_user_progress(wager, current_user.id)
+        )
 
-        if total_tasks > 0 and done_tasks >= total_tasks:
+        if user_tasks_total > 0 and user_tasks_done >= user_tasks_total:
             continue
 
         if wager.end_date:
@@ -164,24 +182,8 @@ def _build_active_wager_cards(team_id):
         else:
             time_remaining = "No deadline"
 
-        points_earned = calculate_wager_points(wager)
-        total_possible_points = total_tasks * POINTS_PER_TASK
-
-        theme_options = [
-            {
-                "container_class": "border border-indigo-200 bg-indigo-50",
-                "badge_class": "bg-indigo-600 text-white",
-            },
-            {
-                "container_class": "border border-purple-200 bg-purple-50",
-                "badge_class": "bg-purple-600 text-white",
-            },
-            {
-                "container_class": "border border-orange-200 bg-orange-50",
-                "badge_class": "bg-orange-500 text-white",
-            },
-        ]
-
+        points_earned = user_tasks_done * POINTS_PER_TASK
+        total_possible_points = user_tasks_total * POINTS_PER_TASK
         theme = theme_options[len(active_wagers) % len(theme_options)]
 
         active_wagers.append(
@@ -192,9 +194,9 @@ def _build_active_wager_cards(team_id):
                 "points_earned": points_earned,
                 "total_possible_points": total_possible_points,
                 "points_per_task": POINTS_PER_TASK,
-                "progress_percent": progress_percent,
-                "tasks_done": done_tasks,
-                "tasks_total": total_tasks,
+                "progress_percent": user_progress_percent,
+                "tasks_done": user_tasks_done,
+                "tasks_total": user_tasks_total,
                 "container_class": theme["container_class"],
                 "badge_class": theme["badge_class"],
             }
