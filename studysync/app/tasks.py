@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import and_, or_
@@ -339,10 +337,6 @@ def edit_task(task_id):
     task.team_id = team_id
     task.priority = validate_priority(request.form.get("priority", "medium"))
 
-    new_status = request.form.get("status")
-    if new_status in ("todo", "in_progress", "done"):
-        task.status = new_status
-
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
         try:
@@ -353,6 +347,8 @@ def edit_task(task_id):
     else:
         task.due_date = None
 
+    # Status is intentionally not updated from the edit form.
+    # Task completion should happen through the dedicated complete action or subtasks.
     handle_task_status_change(task, old_status)
 
     db.session.commit()
@@ -373,8 +369,10 @@ def update_status(task_id):
     old_status = task.status
     new_status = request.form.get("status")
 
-    if new_status in ("todo", "in_progress", "done"):
-        task.status = new_status
+    # Direct status updates are only used for completing a task.
+    # Editing task details must not change status.
+    if new_status == "done":
+        task.status = "done"
         handle_task_status_change(task, old_status)
         db.session.commit()
 
