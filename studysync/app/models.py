@@ -1,13 +1,8 @@
-from datetime import datetime, timezone
-
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
-
-
-def utc_now():
-    return datetime.now(timezone.utc)
+from app.time_utils import now_app_time
 
 
 class User(UserMixin, db.Model):
@@ -17,7 +12,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     created_teams = db.relationship(
         "Team",
@@ -44,7 +39,7 @@ class Team(db.Model):
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=True)
     code = db.Column(db.String(32), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     created_by_user = db.relationship("User", back_populates="created_teams")
@@ -61,7 +56,7 @@ class TeamMember(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="member")
-    joined_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    joined_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     team = db.relationship("Team", back_populates="members")
     user = db.relationship("User", back_populates="memberships")
@@ -93,7 +88,7 @@ class Task(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
     assigned_to_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     user = db.relationship("User", foreign_keys=[user_id], backref=db.backref("tasks", lazy=True))
     team = db.relationship("Team", backref=db.backref("tasks", lazy=True))
@@ -107,7 +102,7 @@ class Subtask(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     is_done = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     task = db.relationship(
         "Task",
@@ -127,7 +122,7 @@ class Activity(db.Model):
     action_type = db.Column(db.String(50), nullable=False)
     message = db.Column(db.String(255), nullable=False)
 
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     user = db.relationship("User", backref=db.backref("activities", lazy=True))
     team = db.relationship("Team", backref=db.backref("activities", lazy=True))
@@ -141,7 +136,7 @@ class ActivityComment(db.Model):
     activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     body = db.Column(db.String(500), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     activity = db.relationship(
         "Activity",
@@ -164,7 +159,7 @@ class ActivityLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     activity_id = db.Column(db.Integer, db.ForeignKey("activities.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     activity = db.relationship(
         "Activity",
@@ -187,7 +182,7 @@ class Nudge(db.Model):
     nudger_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     recipient_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     task = db.relationship(
         "Task",
@@ -218,7 +213,7 @@ class Notification(db.Model):
     message = db.Column(db.String(255), nullable=False)
     link = db.Column(db.String(255), nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     user = db.relationship("User", backref=db.backref("notifications", lazy=True))
 
@@ -235,7 +230,7 @@ class Wager(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     stake_amount = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="active")
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
 
     team = db.relationship("Team", backref="wagers")
     creator = db.relationship("User", backref="created_wagers")
@@ -260,7 +255,7 @@ class WagerParticipant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    joined_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    joined_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_app_time)
     progress = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.String(20), nullable=False, default="on_track")
     reward_amount = db.Column(db.Integer, nullable=False, default=0)
