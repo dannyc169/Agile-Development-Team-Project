@@ -11,7 +11,7 @@ from flask_login import (
 )
 from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
 
@@ -420,7 +420,15 @@ def create_app():
         now = datetime.now(timezone.utc)
         today = now.date()
 
-        all_tasks = Task.query.filter_by(user_id=current_user.id).all()
+        all_tasks = Task.query.filter(
+            or_(
+                Task.assigned_to_user_id == current_user.id,
+                and_(
+                    Task.user_id == current_user.id,
+                    Task.assigned_to_user_id == None,
+                ),
+            )
+        ).all()
         todays_tasks = [
             task for task in all_tasks
             if task.due_date and task.due_date.date() == today
