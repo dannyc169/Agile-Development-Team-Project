@@ -39,7 +39,7 @@ def create_app():
 
     database_path = os.path.join(app.instance_path, "studysync.db")
     app.config.from_mapping(
-        SECRET_KEY="dev-secret-key",
+        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret-key"),
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         WTF_CSRF_ENABLED=True,
