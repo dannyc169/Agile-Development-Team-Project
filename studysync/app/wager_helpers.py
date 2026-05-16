@@ -74,7 +74,7 @@ def count_done_tasks_for_wager(wager):
     """
     Count completed linked tasks for a team-level wager.
 
-    This is used for team wager progress.
+    This is used for overall wager progress.
     It does not represent one user's personal contribution.
     """
     done_count = 0
@@ -152,6 +152,7 @@ def calculate_wager_points_for_user(wager, user_id):
         wager,
         user_id,
     )
+
     return done_tasks * POINTS_PER_TASK
 
 
@@ -184,7 +185,7 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
 
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):
-    """Calculate participant status for a team-level or personal wager progress."""
+    """Calculate participant status for team-level or personal wager progress."""
     today = date.today()
 
     if tasks_total > 0 and tasks_done >= tasks_total:
@@ -357,29 +358,110 @@ def user_is_wager_participant(user_id, wager_id):
     return participant is not None
 
 
-def get_wagers_for_user(user_id, team_ids=None):
+def get_personal_wagers_for_user(user_id, team_ids=None):
     """
-    Get wagers visible to a user.
+    Return wagers that personally belong to the user.
 
-    If team_ids is provided, only wagers in those teams are returned.
-    Otherwise, return wagers from teams that the user belongs to.
+    A personal wager means:
+    - the user is a wager participant; or
+    - the user created the wager.
+
+    This avoids showing every wager from a team just because the user is a
+    member of that team.
     """
+    query = Wager.query.outerjoin(
+        WagerParticipant,
+        WagerParticipant.wager_id == Wager.id,
+    ).filter(
+        or_(
+            WagerParticipant.user_id == user_id,
+            Wager.creator_id == user_id,
+        )
+    )
+
     if team_ids is not None:
         if not team_ids:
             return []
 
-        return Wager.query.filter(Wager.team_id.in_(team_ids)).all()
+        query = query.filter(Wager.team_id.in_(team_ids))
+
+    return query.distinct().order_by(Wager.created_at.desc()).all()
+
+
+def get_active_personal_wagers_for_user(user_id, team_ids=None):
+    """
+    Return active wagers that personally belong to the user.
+
+    This should be used by personal pages such as Dashboard and Activity Feed.
+    Leaders should still only see their own active wagers on those pages.
+    """
+    query = Wager.query.outerjoin(
+        WagerParticipant,
+        WagerParticipant.wager_id == Wager.id,
+    ).filter(
+        or_(
+            WagerParticipant.user_id == user_id,
+            Wager.creator_id == user_id,
+        ),
+        Wager.status == "active",
+    )
+
+    if team_ids is not None:
+        if not team_ids:
+            return []
+
+        query = query.filter(Wager.team_id.in_(team_ids))
+
+    return query.distinct().order_by(Wager.created_at.desc()).all()
+
+
+def get_leader_team_ids(user_id):
+    """Return team IDs where the user is the leader."""
+    memberships = TeamMember.query.filter_by(
+        user_id=user_id,
+        role="leader",
+    ).all()
+
+    return [membership.team_id for membership in memberships]
+
+
+def user_can_view_team_wagers(user_id):
+    """Return whether the user can view team member wagers."""
+    return bool(get_leader_team_ids(user_id))
+
+
+def get_team_wagers_for_leader(user_id):
+    """
+    Return all wagers from teams led by the user.
+
+    This should only be used on the Wager page when the leader selects the
+    Team Members view.
+    """
+    leader_team_ids = get_leader_team_ids(user_id)
+
+    if not leader_team_ids:
+        return []
 
     return (
-        Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-        .filter(TeamMember.user_id == user_id)
+        Wager.query.filter(Wager.team_id.in_(leader_team_ids))
+        .order_by(Wager.created_at.desc())
         .all()
     )
 
 
+def get_wagers_for_user(user_id, team_ids=None):
+    """
+    Backward-compatible wrapper for personal wagers.
+
+    By default, this now returns only wagers that personally belong to the user,
+    not every wager from teams the user belongs to.
+    """
+    return get_personal_wagers_for_user(user_id, team_ids)
+
+
 def count_wagers_won_for_user(user_id, team_ids=None):
     """Count how many team wagers a user has completed as a participant."""
-    wagers = get_wagers_for_user(user_id, team_ids)
+    wagers = get_personal_wagers_for_user(user_id, team_ids)
     won_count = 0
 
     for wager in wagers:
