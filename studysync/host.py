@@ -19,7 +19,7 @@ def main():
     app.run(
         host=os.getenv("HOST_BIND", "0.0.0.0"),
         port=int(os.getenv("HOST_PORT", "5000")),
-        debug=os.getenv("FLASK_DEBUG", "1") != "0",
+        debug=os.getenv("FLASK_DEBUG", "0") == "1",
     )
 
 
