@@ -324,4 +324,6 @@ def member_tasks(team_id, user_id):
 		in_progress_tasks=in_progress_tasks,
 		done_tasks=done_tasks,
 		total_tasks=total_tasks,
+		is_leader=is_leader,
+   		can_manage_member_tasks=is_leader,
 	)
