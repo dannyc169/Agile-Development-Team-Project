@@ -3,9 +3,13 @@
 {% block title %}Wagers - UWA StudySync{% endblock %}
 {% block page_title %}Wagers{% endblock %}
 
+{#
+  Render one wager card.
+  Participant status is intentionally not rendered inside each wager card.
+  The page-level participant overview is rendered once near the top of the page.
+#}
 {% macro render_wager_card(item) %}
 {% set wager = item.wager %}
-{% set participants = item.participants %}
 {% set user_status = item.user_status %}
 
 <section class="space-y-6">
@@ -58,7 +62,8 @@
             <div>
                 <p class="text-sm text-indigo-100 mb-2">Points Earned</p>
                 <p class="text-4xl font-bold">
-                    ⭐ {{ wager.points_earned|default(wager.prize_pool) }} / {{ wager.total_possible_points|default(wager.prize_pool) }} pts
+                    ⭐ {{ wager.points_earned|default(wager.prize_pool) }} /
+                    {{ wager.total_possible_points|default(wager.prize_pool) }} pts
                 </p>
             </div>
 
@@ -120,7 +125,9 @@
                             Each completed linked task gives
                             <span class="font-bold">{{ wager.points_per_task|default(10) }} points</span>.
                             This wager can earn up to
-                            <span class="font-bold">{{ wager.total_possible_points|default(wager.prize_pool) }} points</span>.
+                            <span class="font-bold">
+                                {{ wager.total_possible_points|default(wager.prize_pool) }} points
+                            </span>.
                         </div>
                     </div>
 
@@ -148,71 +155,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="bg-white rounded-2xl shadow p-8">
-                <h3 class="text-3xl font-bold text-gray-900 mb-8">👥 Participant Status</h3>
-
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-left">
-                        <thead>
-                            <tr class="border-b border-gray-200">
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Participant</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Tasks Done</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Progress</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Status</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Points</th>
-                            </tr>
-                        </thead>
-
-                        <tbody class="divide-y divide-gray-100">
-                            {% for participant in participants %}
-                            <tr class="{{ participant.row_class }}">
-                                <td class="py-5">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-full text-white flex items-center justify-center font-bold {{ participant.avatar_color }}">
-                                            {{ participant.avatar }}
-                                        </div>
-
-                                        <div>
-                                            <span class="text-lg {{ participant.name_class }}">
-                                                {{ participant.name }}
-                                            </span>
-
-                                            {% if participant.badge %}
-                                            <p class="text-xs text-gray-500 mt-1">
-                                                🏅 {{ participant.badge.name }}
-                                            </p>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <td class="py-5 text-lg {{ participant.done_class }}">
-                                    {{ participant.tasks_done }}/{{ participant.tasks_total }}
-                                </td>
-
-                                <td class="py-5">
-                                    <div class="w-28 h-3 bg-gray-200 rounded-full overflow-hidden">
-                                        <div class="h-full rounded-full {{ participant.progress_class }}"
-                                             style="width: {{ participant.progress }}%;"></div>
-                                    </div>
-                                </td>
-
-                                <td class="py-5">
-                                    <span class="px-3 py-1 rounded-lg text-sm font-semibold {{ participant.status_class }}">
-                                        {{ participant.status }}
-                                    </span>
-                                </td>
-
-                                <td class="py-5 text-lg font-semibold text-indigo-600">
-                                    {{ participant.points|default(participant.reward) }} pts
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
 
         <div>
@@ -222,7 +164,12 @@
                 <div class="flex justify-center mb-8">
                     <div class="relative w-36 h-36">
                         <svg class="w-36 h-36 transform -rotate-90">
-                            <circle cx="72" cy="72" r="56" stroke="#E5E7EB" stroke-width="10" fill="none"></circle>
+                            <circle cx="72"
+                                    cy="72"
+                                    r="56"
+                                    stroke="#E5E7EB"
+                                    stroke-width="10"
+                                    fill="none"></circle>
 
                             {% set percent = 0 %}
                             {% if user_status.tasks_total > 0 %}
@@ -303,13 +250,89 @@
                             </label>
                             {% endfor %}
                         {% else %}
-                            <p class="text-sm text-gray-500">No linked tasks.</p>
+                            <p class="text-sm text-gray-500">No linked tasks assigned to you.</p>
                         {% endif %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</section>
+{% endmacro %}
+
+{#
+  Render one page-level participant overview.
+  This table uses aggregated personal task data prepared in __init__.py.
+  It should appear once near the top of the Wagers page.
+#}
+{% macro render_participant_status_overview(participants) %}
+<section class="bg-white rounded-2xl shadow p-8">
+    <h2 class="text-3xl font-bold text-gray-900 mb-8">👥 Participant Status Overview</h2>
+
+    {% if participants %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-left">
+            <thead>
+                <tr class="border-b border-gray-200">
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Participant</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Tasks Done</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Progress</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Status</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Points</th>
+                </tr>
+            </thead>
+
+            <tbody class="divide-y divide-gray-100">
+                {% for participant in participants %}
+                <tr class="{{ participant.row_class }}">
+                    <td class="py-5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full text-white flex items-center justify-center font-bold {{ participant.avatar_color }}">
+                                {{ participant.avatar }}
+                            </div>
+
+                            <div>
+                                <span class="text-lg {{ participant.name_class }}">
+                                    {{ participant.name }}
+                                </span>
+
+                                {% if participant.badge %}
+                                <p class="text-xs text-gray-500 mt-1">
+                                    🏅 {{ participant.badge.name }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+
+                    <td class="py-5 text-lg {{ participant.done_class }}">
+                        {{ participant.tasks_done }}/{{ participant.tasks_total }}
+                    </td>
+
+                    <td class="py-5">
+                        <div class="w-28 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full {{ participant.progress_class }}"
+                                 style="width: {{ participant.progress }}%;"></div>
+                        </div>
+                    </td>
+
+                    <td class="py-5">
+                        <span class="px-3 py-1 rounded-lg text-sm font-semibold {{ participant.status_class }}">
+                            {{ participant.status }}
+                        </span>
+                    </td>
+
+                    <td class="py-5 text-lg font-semibold text-indigo-600">
+                        {{ participant.points }} pts
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500">No participant data available.</p>
+    {% endif %}
 </section>
 {% endmacro %}
 
@@ -328,6 +351,8 @@
             + Create Wager
         </a>
     </div>
+
+    {{ render_participant_status_overview(participant_overview|default([])) }}
 
     <div class="space-y-10">
         <section class="space-y-6">
