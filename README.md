@@ -1,285 +1,84 @@
 # StudySync
 
-A lightweight Flask web application built as part of a UWA Agile Development project. StudySync helps student teams stay organized and accountable by providing team spaces, user authentication, and an incentive-based challenge system called Wagers.
+StudySync is a team study collaboration web app for university students. It brings together the common tasks of group study and assignments into one place: member management, task assignment, progress tracking, team activity feeds, and notifications.
 
-This project is designed to be simple to run locally, easy to extend, and clear enough to serve as a student portfolio or capstone project.
+The app is built around **teams** as the core unit. Users can create or join teams, then create tasks within a team, assign them to members, and update completion status. Team members can stay up to date through the activity feed and receive alerts for key events via the notification system. To help motivate task completion, the app also includes a **Wager** feature, where members can stake points on who finishes a task on time.
 
-## Overview
+**Example use cases:**
+- Course group assignments: break down tasks, assign to members, track progress
+- Study groups: set tasks, check team activity, keep each other accountable
+- Student clubs or projects: use tasks and notifications to stay in sync
 
-StudySync provides a basic collaboration environment for student teams. Users can create or join teams, track shared goals, and participate in Wagers, team challenges that include stakes, deadlines, and task lists. The goal is to encourage motivation and consistent progress within groups.
+---
 
-## Key Features
+## Features
 
-### Authentication and Account Management
+- User registration and login
+- Create and join teams
+- Create tasks within a team, assign to members, and mark as complete
+- Activity feed to follow team updates
+- Notification system for key events
+- Wager feature — stake points on who completes a task on time
 
-- User registration and login using Flask-Login
-- Session management and logout
-- Change password for logged-in users
-- Demo-style password reset flow that can be extended to email token verification later
-
-### Teams
-
-- Create teams with a name and description
-- Join teams using a generated invite code
-- Role-based behavior, with team leader permissions enforced in key actions such as creating Wagers
-
-### Wagers (Team Challenges)
-
-Wagers convert team goals into structured challenges with clear incentives.
-
-- Team leaders can create Wagers with titles, descriptions, start/end dates, stake amounts, and checklists
-- Team members are automatically enrolled once a Wager is created
-- Participants track progress with statuses like On Track, At Risk, Completed, Failed
-- A simple prize-pool model based on stake amounts is illustrated through the interface
-
-### User Interface
-
-- Dashboard after login
-- Team pages for creating, joining, and viewing details
-- Wager creation and detail pages
-- Placeholder feed page for future updates
+---
 
 ## Tech Stack
 
-- Backend: Flask
-- Database: SQLite, stored under `instance/`
-- ORM: SQLAlchemy / Flask-SQLAlchemy
-- Authentication: Flask-Login
-- Forms and CSRF protection: Flask-WTF
-- Frontend: HTML templates with Jinja and Tailwind CSS (CDN)
+- Python Flask
+- SQLite
+- SQLAlchemy
+- Jinja2 templates
+- Tailwind CSS
+- Selenium for end-to-end testing
 
-## Getting Started (Local Development)
+---
 
-The following steps assume you are running commands inside the `studysync` directory.
+## Team Members
 
-1. Enter the project directory
+| UWA ID   | Name        | GitHub Username |
+|----------|-------------|-----------------|
+| 24289151 | Wu Jinghan  | Jinghan0412     |
+| 24213379 | Kunyu He    | Y0gnut          |
+| 24993619 | Chen Di     | dannyc169       |
+| 24458695 | Keming Cao  | kemingcao       |
+
+---
+
+## Project Requirements Mapping
+
+- **Client-server architecture:** The application uses Flask routes, Jinja templates, and a SQLite database.
+- **Login and logout:** Users can register, log in, and log out.
+- **Persistent user data:** User, team, task, notification, and wager data are stored using SQLite and SQLAlchemy.
+- **Viewing other users' data:** Team members can view team tasks, member progress, activity feed updates, and notifications.
+
+---
+
+## Getting Started
+
+Run the following commands from inside the `studysync` directory:
 
 ```bash
 cd studysync
-```
-
-2. Create and activate a virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-3. Install dependencies
-
-```bash
 pip install -r requirements.txt
-```
-
-4. Configure environment variables
-
-Set the Flask `SECRET_KEY` for the Host, and set the Host address for Clients:
-
-```bash
-export SECRET_KEY=replace-with-your-local-secret
-export HOST_BASE_URL=http://192.168.1.50:5000
-```
-
-Do not commit real secrets into the repository.
-
-## Host-Client Deployment
-
-StudySync now runs in a Host-Client layout for LAN use, while keeping the existing features, pages, and business logic unchanged.
-
-### Host
-
-The Host owns the SQLite database and runs the full Flask backend.
-
-Run it with:
-
-```bash
 python3 host.py
 ```
 
-Default Host settings:
+Once started, open the address shown in the terminal output in your browser.
 
-- Bind address: `0.0.0.0`
-- Port: `5000`
-- Database file: `studysync/instance/studysync.db`
+---
 
-Optional Host overrides:
+## Running Tests
 
-```bash
-export HOST_BIND=0.0.0.0
-export HOST_PORT=5000
-export FLASK_DEBUG=1
-```
-
-### Client
-
-The Client is a thin local reverse proxy. It does not access the database directly; it forwards browser traffic to the Host over the LAN while keeping the same routes, forms, sessions, and responses.
-
-Run it with:
+### Unit Tests
 
 ```bash
-python3 deploy/client.py
+pytest tests/unit/
 ```
 
-The old `python3 client.py` path still works as a legacy compatibility wrapper.
+### Selenium E2E Tests
 
-Default Client settings:
-
-- Bind address: `0.0.0.0`
-- Port: `5001`
-- Upstream Host: `http://127.0.0.1:5000`
-
-Set the Host IP or hostname with:
+Selenium tests require a running server. Start `python3 host.py` in one terminal, then in a second terminal run:
 
 ```bash
-export HOST_BASE_URL=http://192.168.1.50:5000
-export CLIENT_PORT=5001
-```
-
-Open the Client in your browser:
-
-- Client URL: http://127.0.0.1:5001
-
-The Client forwards all requests to the Host, so the existing login, dashboard, teams, tasks, feed, and wager flows remain unchanged.
-
-### Backward Compatibility
-
-The original `python3 run.py` command still starts the Host for compatibility.
-
-## 运行单元测试
-
-Install the runtime and development dependencies, then run pytest from the `studysync` directory:
-
-```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pytest
-```
-
-## 运行 E2E（Selenium）测试
-
-Start the live server in one terminal first:
-
-```bash
-python3 host.py
-```
-
-Then run the Selenium tests from the `studysync` directory in another terminal:
-
-```bash
-BASE_URL=http://127.0.0.1:5000 pytest -m e2e tests/e2e_selenium -q
-```
-
-You can change `BASE_URL` to point at another host or port if needed. The Selenium tests expect a browser and a driver. Selenium Manager can handle the driver automatically in recent Selenium versions; otherwise install ChromeDriver or another compatible driver for your browser.
-
-## 多人访问（cloudflared 内网穿透）
-
-If you want to let teammates access your local Host from outside your LAN, you can expose the running Flask server with cloudflared. The cloudflared binary is not bundled with this repository, so install it separately from the official Cloudflare release for your operating system.
-
-Run the Host locally first, then expose it:
-
-```bash
-python3 host.py
-cloudflared tunnel --url http://127.0.0.1:5000
-```
-
-If port `5000` is already in use, choose another Host port and point cloudflared at that address instead:
-
-```bash
-export HOST_PORT=5050
-python3 host.py
-cloudflared tunnel --url http://127.0.0.1:5050
-```
-
-Security reminders:
-
-- Do not expose the app with Flask debug mode enabled.
-- Always set a strong `SECRET_KEY` before sharing the tunnel URL.
-- Treat the tunnel URL as public access to your running app.
-
-## End-to-End Testing
-
-An automated end-to-end test is available using Playwright. It exercises the full user journey: registration, team creation, joining, task management, and wagers.
-
-### Setup
-
-Install Playwright (required for e2e testing):
-
-```bash
-pip install playwright
-python -m playwright install
-```
-
-### Run the Test
-
-From the `studysync` directory:
-
-```bash
-python3 e2e_test.py --base-url http://127.0.0.1:5000
-```
-
-Options:
-
-- `--base-url` (default: http://127.0.0.1:5000) — URL of Host or Client
-- `--headed` — Show browser window (default: headless)
-- `--slowmo <ms>` — Slow down actions by N milliseconds for demo
-
-Example with visible browser and slowdown:
-
-```bash
-python3 e2e_test.py --base-url http://127.0.0.1:5001 --headed --slowmo 500
-```
-
-The test will:
-- Create 4 users with unique suffixes
-- Create a team and extract the invite code
-- Register members and join the team
-- Visit key pages (dashboard, todos, teams, wagers, feed)
-- Perform operations (change password, logout, login with new credentials)
-- Print clear step-by-step logs
-- Save screenshots on failure
-- Exit with status 0 on success, 1 on failure
-
-## Quick Feature Walkthrough
-
-### Register
-
-Navigate to `/register`, create an account, and you will be redirected to the dashboard.
-
-### Login / Logout
-
-Use `/login` to log in. The sidebar includes a logout button.
-
-### Create a Team
-
-Go to `/teams` to create a new team. The team detail page will display its invite code.
-
-### Join a Team
-
-Log in as another user and go to `/teams/join`. Enter the invite code to join.
-
-### Create a Wager (Team Leader)
-
-Visit `/wagers/create` and select a team you lead.
-Configure the stake, dates, tasks, and create the Wager.
-All team members will be automatically added as participants.
-
-## Project Structure
-
-```text
-.
-├── README.md
-└── studysync/
-    ├── client.py
-    ├── client_proxy.py
-    ├── host.py
-    ├── run.py
-    ├── requirements.txt
-    ├── seed.py
-    └── app/
-        ├── __init__.py
-        ├── models.py
-        ├── forms.py
-        ├── teams.py
-        ├── tasks.py
-        └── templates/
+pytest tests/e2e_selenium/ -m e2e -v
 ```
