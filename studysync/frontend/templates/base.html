@@ -13,161 +13,7 @@
 
     {% block extra_head %}{% endblock %}
 
-    <style>
-        :root {
-            --primary-color: #4F46E5;
-            --primary-dark: #4338CA;
-            --primary-light: #6366F1;
-        }
-        
-        body {
-            transition: margin-left 0.3s ease;
-        }
-        
-        .sidebar {
-            background-color: #F2F4F7;
-            border-right: 1px solid #E5E7EB;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            border-radius: 0.375rem;
-            color: #6B7280;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            margin-bottom: 0.5rem;
-        }
-        
-        .nav-link:hover {
-            background-color: #E5E7EB;
-            color: var(--primary-color);
-        }
-        
-        .nav-link.active {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .topbar {
-            background-color: white;
-            border-bottom: 1px solid #E5E7EB;
-        }
-        
-        .notification-badge {
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 9999px;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-        
-        .avatar {
-            width: 2.5rem;
-            height: 2.5rem;
-            border-radius: 9999px;
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        
-        .alert {
-            padding: 1rem;
-            border-radius: 0.375rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            animation: slideDown 0.3s ease;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .alert-success {
-            background-color: #D1FAE5;
-            color: #065F46;
-            border: 1px solid #6EE7B7;
-        }
-        
-        .alert-error {
-            background-color: #FEE2E2;
-            color: #991B1B;
-            border: 1px solid #FCA5A5;
-        }
-        
-        .alert-close {
-            cursor: pointer;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-        
-        .alert-close:hover {
-            opacity: 1;
-        }
-        
-        .mobile-nav {
-            display: none;
-        }
-        
-        @media (max-width: 767px) {
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                width: 240px;
-                z-index: 40;
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-            }
-            
-            .sidebar.open {
-                transform: translateX(0);
-            }
-            
-            body {
-                margin-left: 0;
-            }
-            
-            .main-content {
-                margin-left: 0;
-            }
-            
-            .sidebar-overlay {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background-color: rgba(0, 0, 0, 0.5);
-                z-index: 30;
-            }
-            
-            .sidebar-overlay.open {
-                display: block;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body class="bg-white">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -183,7 +29,7 @@
                             {% endif %}
                         </div>
                         <span>{{ message }}</span>
-                        <button class="alert-close ml-auto" onclick="this.parentElement.style.display='none';">
+                        <button class="alert-close ml-auto">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -197,29 +43,29 @@
 
         <aside class="sidebar fixed left-0 top-0 h-full w-60 overflow-y-auto z-50">
             <div class="p-6 border-b border-gray-200 flex items-center gap-2">
-                <i class="fas fa-bolt text-2xl" style="color: var(--primary-color);"></i>
-                <h1 class="text-xl font-bold" style="color: var(--primary-color);">StudySync</h1>
+                <i class="fas fa-bolt text-2xl brand-primary"></i>
+                <h1 class="text-xl font-bold brand-primary">StudySync</h1>
             </div>
 
             <nav class="p-4">
-                <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" onclick="setActiveNav(this)">
-                    <i class="fas fa-house" style="width: 1.25rem;"></i>
+                <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}">
+                    <i class="fas fa-house nav-icon"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="/todos" class="nav-link {% if request.path == '/todos' %}active{% endif %}" onclick="setActiveNav(this)">
-                    <i class="fas fa-list-check" style="width: 1.25rem;"></i>
+                <a href="/todos" class="nav-link {% if request.path == '/todos' %}active{% endif %}">
+                    <i class="fas fa-list-check nav-icon"></i>
                     <span>My Tasks</span>
                 </a>
-                <a href="/teams" class="nav-link {% if request.path == '/teams' %}active{% endif %}" onclick="setActiveNav(this)">
-                    <i class="fas fa-people-group" style="width: 1.25rem;"></i>
+                <a href="/teams" class="nav-link {% if request.path == '/teams' %}active{% endif %}">
+                    <i class="fas fa-people-group nav-icon"></i>
                     <span>My Teams</span>
                 </a>
-                <a href="/feed" class="nav-link {% if request.path == '/feed' %}active{% endif %}" onclick="setActiveNav(this)">
-                    <i class="fas fa-bell" style="width: 1.25rem;"></i>
+                <a href="/feed" class="nav-link {% if request.path == '/feed' %}active{% endif %}">
+                    <i class="fas fa-bell nav-icon"></i>
                     <span>Activity Feed</span>
                 </a>
-                <a href="/wagers" class="nav-link {% if request.path == '/wagers' %}active{% endif %}" onclick="setActiveNav(this)">
-                    <i class="fas fa-trophy" style="width: 1.25rem;"></i>
+                <a href="/wagers" class="nav-link {% if request.path == '/wagers' %}active{% endif %}">
+                    <i class="fas fa-trophy nav-icon"></i>
                     <span>Wagers</span>
                 </a>
             </nav>
@@ -262,7 +108,7 @@
                             <span>{{ "{:,}".format(current_points) }} pts</span>
                         </div>
 
-                        <button class="md:hidden text-gray-600 hover:text-gray-900" id="mobileMenuBtn" onclick="toggleSidebar()">
+                        <button class="md:hidden text-gray-600 hover:text-gray-900" id="mobileMenuBtn">
                             <i class="fas fa-bars text-xl"></i>
                         </button>
                     </div>
@@ -272,7 +118,7 @@
             <main class="p-8">
                 {% block content %}
                     <div class="bg-gray-50 rounded-lg p-8 text-center">
-                        <i class="fas fa-inbox text-4xl text-gray-300 mb-4" style="display: block;"></i>
+                        <i class="fas fa-inbox text-4xl text-gray-300 mb-4 block-icon"></i>
                         <p class="text-gray-500 text-lg">Welcome to UWA StudySync</p>
                         <p class="text-gray-400 text-sm mt-2">Select a section from the sidebar to get started</p>
                     </div>
@@ -329,86 +175,7 @@
             </div>
         </div>
 
-        <script>
-            function setActiveNav(element) {
-                document.querySelectorAll('.nav-link').forEach(link => {
-                    link.classList.remove('active');
-                });
-                element.classList.add('active');
-            }
-
-            function toggleSidebar() {
-                const sidebar = document.querySelector('.sidebar');
-                const overlay = document.getElementById('sidebarOverlay');
-
-                sidebar.classList.toggle('open');
-                overlay.classList.toggle('open');
-            }
-
-            document.getElementById('sidebarOverlay').addEventListener('click', function() {
-                const sidebar = document.querySelector('.sidebar');
-                sidebar.classList.remove('open');
-                this.classList.remove('open');
-            });
-
-            document.addEventListener('DOMContentLoaded', function() {
-                const currentPath = window.location.pathname;
-                const navLinks = document.querySelectorAll('.nav-link');
-
-                navLinks.forEach(link => {
-                    if (link.getAttribute('href') === currentPath) {
-                        link.classList.add('active');
-                    }
-                });
-            });
-
-            const openUserModalBtn = document.getElementById('openUserModalBtn');
-            const closeUserModalBtn = document.getElementById('closeUserModalBtn');
-            const userModalOverlay = document.getElementById('userModalOverlay');
-            const userModal = document.getElementById('userModal');
-
-            function openUserModal() {
-                if (!userModalOverlay || !userModal) {
-                    return;
-                }
-                userModalOverlay.classList.remove('hidden');
-                userModal.classList.remove('hidden');
-                userModalOverlay.setAttribute('aria-hidden', 'false');
-                userModal.setAttribute('aria-hidden', 'false');
-                document.body.classList.add('overflow-hidden');
-                userModal.focus();
-            }
-
-            function closeUserModal() {
-                if (!userModalOverlay || !userModal) {
-                    return;
-                }
-                userModalOverlay.classList.add('hidden');
-                userModal.classList.add('hidden');
-                userModalOverlay.setAttribute('aria-hidden', 'true');
-                userModal.setAttribute('aria-hidden', 'true');
-                document.body.classList.remove('overflow-hidden');
-                if (openUserModalBtn) {
-                    openUserModalBtn.focus();
-                }
-            }
-
-            if (openUserModalBtn) {
-                openUserModalBtn.addEventListener('click', openUserModal);
-            }
-            if (closeUserModalBtn) {
-                closeUserModalBtn.addEventListener('click', closeUserModal);
-            }
-            if (userModalOverlay) {
-                userModalOverlay.addEventListener('click', closeUserModal);
-            }
-
-            document.addEventListener('keydown', function(event) {
-                if (event.key === 'Escape' && userModal && !userModal.classList.contains('hidden')) {
-                    closeUserModal();
-                }
-            });
-        </script>
+        <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% else %}
         <main class="min-h-screen flex items-center justify-center p-8">
             <div class="w-full max-w-4xl">
