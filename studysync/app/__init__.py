@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_login import (
@@ -609,6 +609,138 @@ def create_app(test_config=None):
         progress_rows.sort(key=lambda row: row["team_name"].lower())
         return progress_rows
 
+    def build_dashboard_focus_tasks(all_tasks, today, limit=5):
+        """Build a small priority queue for the dashboard.
+
+        The dashboard should highlight what needs attention now, while the
+        full My Tasks page remains responsible for complete task management.
+        """
+        priority_rank = {"high": 0, "medium": 1, "low": 2}
+        focus_rows = []
+        seen_task_ids = set()
+        upcoming_cutoff = today + timedelta(days=7)
+
+        def task_due_date(task):
+            return task.due_date.date() if task.due_date else None
+
+        def task_sort_key(task):
+            due = task_due_date(task)
+            return (
+                due or datetime.max.date(),
+                priority_rank.get(task.priority, 3),
+                task.title.lower(),
+            )
+
+        def has_active_wager(task):
+            for link in getattr(task, "wager_links", []):
+                wager = getattr(link, "wager", None)
+
+                if wager is not None and wager.status == "active":
+                    return True
+
+            return False
+
+        def add_focus_task(task, category, label, badge_class, icon):
+            if len(focus_rows) >= limit:
+                return
+
+            if task.id in seen_task_ids or task.status == "done":
+                return
+
+            due = task_due_date(task)
+
+            if due is None:
+                due_label = "No due date"
+            elif due < today:
+                days_overdue = (today - due).days
+                due_label = f"{days_overdue}d overdue"
+            elif due == today:
+                due_label = "Due today"
+            else:
+                days_left = (due - today).days
+                due_label = f"Due in {days_left}d"
+
+            focus_rows.append(
+                {
+                    "task": task,
+                    "category": category,
+                    "label": label,
+                    "badge_class": badge_class,
+                    "icon": icon,
+                    "due_label": due_label,
+                }
+            )
+            seen_task_ids.add(task.id)
+
+        active_tasks = [task for task in all_tasks if task.status != "done"]
+
+        overdue_tasks = sorted(
+            [
+                task for task in active_tasks
+                if task_due_date(task) is not None and task_due_date(task) < today
+            ],
+            key=task_sort_key,
+        )
+        due_today_tasks = sorted(
+            [
+                task for task in active_tasks
+                if task_due_date(task) == today
+            ],
+            key=task_sort_key,
+        )
+        upcoming_tasks = sorted(
+            [
+                task for task in active_tasks
+                if (
+                    task_due_date(task) is not None
+                    and today < task_due_date(task) <= upcoming_cutoff
+                )
+            ],
+            key=task_sort_key,
+        )
+        wager_tasks = sorted(
+            [task for task in active_tasks if has_active_wager(task)],
+            key=task_sort_key,
+        )
+
+        for task in overdue_tasks:
+            add_focus_task(
+                task,
+                "overdue",
+                "Overdue",
+                "bg-red-100 text-red-700",
+                "fa-triangle-exclamation",
+            )
+
+        for task in due_today_tasks:
+            add_focus_task(
+                task,
+                "due_today",
+                "Due Today",
+                "bg-orange-100 text-orange-700",
+                "fa-calendar-day",
+            )
+
+        for task in upcoming_tasks:
+            add_focus_task(
+                task,
+                "upcoming",
+                "Next 7 Days",
+                "bg-blue-100 text-blue-700",
+                "fa-calendar-week",
+            )
+
+        for task in wager_tasks:
+            add_focus_task(
+                task,
+                "wager",
+                "Active Wager",
+                "bg-purple-100 text-purple-700",
+                "fa-trophy",
+            )
+
+        return focus_rows
+
     def build_dashboard_recent_activities(user_id, limit=5):
         """Build recent activity rows from teams the user belongs to."""
         memberships = TeamMember.query.filter_by(user_id=user_id).all()
@@ -688,6 +820,7 @@ def create_app(test_config=None):
             task for task in todays_tasks
             if task.status == "done"
         ]
+        focus_tasks = build_dashboard_focus_tasks(all_tasks, today)
 
         memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
         teams = [membership.team for membership in memberships]
@@ -702,6 +835,7 @@ def create_app(test_config=None):
         return render_template(
             "dashboard/index.html",
             todays_tasks=todays_tasks,
+            focus_tasks=focus_tasks,
             todays_done_count=len(todays_done),
             todays_total_count=len(todays_tasks),
             teams=teams,
