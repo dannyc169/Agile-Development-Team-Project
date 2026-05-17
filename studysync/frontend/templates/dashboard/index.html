@@ -130,49 +130,75 @@
         <!-- LEFT COLUMN -->
         <div class="lg:col-span-2 space-y-6">
 
-            <!-- Today's Tasks Card -->
+            <!-- Focus Queue Card -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-bold text-gray-900 mb-4">Today's Tasks</h2>
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">Focus Queue</h2>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Overdue, due soon, and active wager tasks that need attention first
+                        </p>
+                    </div>
+                    <i class="fas fa-bullseye text-indigo-500 text-lg"></i>
+                </div>
 
                 <div class="space-y-3">
-                    {% if todays_tasks %}
+                    {% if focus_tasks %}
                     {% set priority_colors = {
                         'high': 'bg-red-100 text-red-700',
                         'medium': 'bg-blue-100 text-blue-700',
                         'low': 'bg-green-100 text-green-700'
                     } %}
 
-                    {% for task in todays_tasks %}
-                    <div class="flex items-center gap-4 p-3 rounded-lg {{ 'bg-gray-50' if task.status == 'done' else 'hover:bg-gray-50' }} transition">
-                        <form method="POST" action="{{ url_for('tasks.update_status', task_id=task.id) }}">
+                    {% for row in focus_tasks %}
+                    {% set task = row.task %}
+                    <div class="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition">
+                        <form method="POST"
+                              action="{{ url_for('tasks.update_status', task_id=task.id) }}"
+                              class="pt-1">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="status" value="{{ 'todo' if task.status == 'done' else 'done' }}">
+                            <input type="hidden" name="status" value="done">
                             <input type="checkbox"
                                    class="w-5 h-5 text-indigo-600 rounded cursor-pointer"
-                                   {{ 'checked' if task.status == 'done' else '' }}
                                    onchange="this.form.submit()">
                         </form>
 
                         <div class="flex-1 min-w-0">
-                            <p class="text-sm {{ 'text-gray-400 line-through' if task.status == 'done' else 'text-gray-900 font-medium' }}">
+                            <div class="flex flex-wrap items-center gap-2 mb-1">
+                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold {{ row.badge_class }}">
+                                    <i class="fas {{ row.icon }} text-xs"></i>
+                                    {{ row.label }}
+                                </span>
+
+                                <span class="inline-block {{ priority_colors.get(task.priority, 'bg-gray-100 text-gray-700') }} px-2 py-1 rounded text-xs font-semibold">
+                                    {{ task.priority | capitalize }}
+                                </span>
+                            </div>
+
+                            <p class="text-sm text-gray-900 font-medium">
                                 {{ task.title }}
                             </p>
 
-                            {% if task.team %}
-                            <p class="text-xs text-gray-500">{{ task.team.name }}</p>
-                            {% endif %}
-                        </div>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                                {% if task.team %}
+                                <span>
+                                    <i class="fas fa-people-group mr-1"></i>{{ task.team.name }}
+                                </span>
+                                {% endif %}
 
-                        <span class="inline-block {{ priority_colors.get(task.priority, 'bg-gray-100 text-gray-700') }} px-2 py-1 rounded text-xs font-semibold whitespace-nowrap">
-                            {{ task.priority | capitalize }}
-                        </span>
+                                <span>
+                                    <i class="fas fa-clock mr-1"></i>{{ row.due_label }}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
 
                     {% else %}
                     <div class="text-center py-8 text-gray-400">
                         <i class="fas fa-check-circle text-3xl mb-2"></i>
-                        <p class="text-sm">No tasks due today!</p>
+                        <p class="text-sm font-medium text-gray-500">No urgent tasks right now.</p>
+                        <p class="text-xs mt-1">Use My Tasks to review your full task list.</p>
                     </div>
                     {% endif %}
                 </div>
