@@ -24,8 +24,7 @@
                 </div>
 
                 {% if user_teams %}
-                    <select onchange="window.location.href=this.value"
-                            class="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                    <select class="feed-team-select px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                         {% for team in user_teams %}
                             <option value="{{ url_for('feed.activity_feed', team_id=team.id) }}"
                                     {% if team.id == selected_team_id %}selected{% endif %}>
@@ -126,8 +125,7 @@
                             </form>
 
                             <button type="button"
-                                    onclick="this.closest('.reaction-section').querySelector('.comment-section').classList.toggle('hidden')"
-                                    class="flex items-center gap-2 text-gray-600 hover:text-indigo-600 text-sm transition">
+                                    class="comment-toggle-btn flex items-center gap-2 text-gray-600 hover:text-indigo-600 text-sm transition">
                                 <i class="far fa-comment"></i>
                                 <span>{{ activity.comments|length }} comment{{ 's' if activity.comments|length != 1 else '' }}</span>
                             </button>
@@ -330,4 +328,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/feed.js') }}"></script>
 {% endblock %}

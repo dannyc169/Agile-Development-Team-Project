@@ -8,7 +8,7 @@
 {% block page_title %}Edit Wager{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto bg-white rounded-lg shadow p-8">
+<div id="wagerFormPage" data-points-per-task="{{ points_per_task|default(10) }}" class="max-w-3xl mx-auto bg-white rounded-lg shadow p-8">
     <h1 class="text-3xl font-bold text-gray-900 mb-2">Edit Wager</h1>
 
     <p class="text-sm text-gray-500 mb-6">
@@ -135,50 +135,9 @@
         </div>
     </form>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const datePickerOptions = {
-        dateFormat: "Y-m-d",
-        allowInput: false,
-        minDate: "2000-01-01",
-        maxDate: "2099-12-31"
-    };
-
-    flatpickr("#startDate", datePickerOptions);
-    flatpickr("#endDate", datePickerOptions);
-
-    const checkboxes = document.querySelectorAll(".js-task-checkbox");
-    const pointsPreview = document.getElementById("points-preview");
-    const selectedTaskCount = document.getElementById("selected-task-count");
-    const totalPoints = document.getElementById("total-points");
-    const pointsPerTask = {{ points_per_task|default(10) }};
-
-    function updatePointsPreview() {
-        let count = 0;
-
-        checkboxes.forEach(checkbox => {
-            if (checkbox.checked) {
-                count += 1;
-            }
-        });
-
-        selectedTaskCount.textContent = count;
-        totalPoints.textContent = count * pointsPerTask;
-
-        if (count > 0) {
-            pointsPreview.classList.remove("hidden");
-        } else {
-            pointsPreview.classList.add("hidden");
-        }
-    }
-
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener("change", updatePointsPreview);
-    });
-
-    updatePointsPreview();
-});
-</script>
+<script src="{{ url_for('static', filename='js/wager-form.js') }}"></script>
 {% endblock %}
