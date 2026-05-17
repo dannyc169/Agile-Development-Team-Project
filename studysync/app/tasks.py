@@ -401,12 +401,17 @@ def update_status(task_id):
     old_status = task.status
     new_status = request.form.get("status")
 
-    # Direct status updates are only used for completing a task.
-    # Editing task details must not change status.
-    if new_status == "done":
-        task.status = "done"
-        handle_task_status_change(task, old_status)
-        db.session.commit()
+    if new_status not in ("todo", "done"):
+        flash("Invalid task status.", "error")
+        return redirect_after_task_action()
+
+    if task.subtasks:
+        flash("Tasks with subtasks are updated through subtask progress.", "error")
+        return redirect_after_task_action()
+
+    task.status = new_status
+    handle_task_status_change(task, old_status)
+    db.session.commit()
 
     return redirect_after_task_action()
 
