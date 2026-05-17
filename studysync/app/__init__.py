@@ -111,6 +111,13 @@ def create_app(test_config=None):
 
         return value.strftime("%Y-%m-%d")
 
+    def parse_wager_date(date_str):
+        """Parse a wager date and require the exact YYYY-MM-DD format."""
+        if len(date_str) != 10:
+            raise ValueError("Date must use YYYY-MM-DD format.")
+
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+
     def avatar_color_for_index(index):
         colors = [
             "bg-purple-500",
@@ -721,7 +728,7 @@ def create_app(test_config=None):
         - Team Members scope: filter by teams the current user leads.
         """
         requested_scope = request.args.get("scope", "personal")
-        selected_team_raw = request.args.get("team_id", "all")
+        selected_team_raw = request.args.get("team_id")
     
         can_view_team_wagers = user_can_view_team_wagers(current_user.id)
     
@@ -750,21 +757,28 @@ def create_app(test_config=None):
     
         allowed_team_ids = {team.id for team in team_filter_teams}
         selected_team_id = None
-    
-        if selected_team_raw and selected_team_raw != "all":
+
+        if selected_team_raw:
             try:
                 candidate_team_id = int(selected_team_raw)
-    
+
                 if candidate_team_id in allowed_team_ids:
                     selected_team_id = candidate_team_id
             except ValueError:
                 selected_team_id = None
-    
+
+        # Wagers must always be viewed within one team to avoid mixing data
+        # from different teams on the same page.
+        if selected_team_id is None and team_filter_teams:
+            selected_team_id = team_filter_teams[0].id
+
         if selected_team_id is not None:
             wagers = [
                 wager for wager in wagers
                 if wager.team_id == selected_team_id
             ]
+        else:
+            wagers = []
     
         sections = {
             "active": [],
@@ -772,7 +786,7 @@ def create_app(test_config=None):
             "failed": [],
         }
         
-        overview_team_ids = list(allowed_team_ids)
+        overview_team_ids = []
 
         if selected_team_id is not None:
             overview_team_ids = [selected_team_id]
@@ -829,12 +843,17 @@ def create_app(test_config=None):
 
         team_ids = [team.id for team in teams]
 
+        used_task_ids_query = db.session.query(WagerTask.task_id).filter(
+            WagerTask.task_id.isnot(None)
+        )
+
         task_options = []
         if team_ids:
             task_options = (
                 Task.query.filter(
                     Task.team_id.in_(team_ids),
                     Task.status != "done",
+                    ~Task.id.in_(used_task_ids_query),
                 )
                 .order_by(Task.created_at.asc())
                 .all()
@@ -876,8 +895,8 @@ def create_app(test_config=None):
 
             if not error:
                 try:
-                    start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                    start_date = parse_wager_date(start_date_raw)
+                    end_date = parse_wager_date(end_date_raw)
 
                     if end_date < start_date:
                         error = "End Date cannot be earlier than Start Date."
@@ -899,8 +918,14 @@ def create_app(test_config=None):
                         Task.query.filter(Task.id.in_(selected_task_ids_int)).all()
                     )
 
+                    already_linked_task = WagerTask.query.filter(
+                        WagerTask.task_id.in_(selected_task_ids_int)
+                    ).first()
+
                     if len(selected_tasks) != len(selected_task_ids_int):
                         error = "Some selected tasks do not exist."
+                    elif already_linked_task is not None:
+                        error = "Each task can only be linked to one wager."
                     elif any(task.team_id != selected_team.id for task in selected_tasks):
                         error = "Selected tasks must belong to the chosen team."
                     elif any(task.status == "done" for task in selected_tasks):
@@ -1013,6 +1038,11 @@ def create_app(test_config=None):
             if getattr(link, "task_id", None) is not None
         }
 
+        used_by_other_wagers_query = db.session.query(WagerTask.task_id).filter(
+            WagerTask.task_id.isnot(None),
+            WagerTask.wager_id != wager.id,
+        )
+
         if existing_task_ids:
             task_filter = or_(
                 Task.status != "done",
@@ -1025,6 +1055,7 @@ def create_app(test_config=None):
             Task.query.filter(
                 Task.team_id == wager.team_id,
                 task_filter,
+                ~Task.id.in_(used_by_other_wagers_query),
             )
             .order_by(Task.created_at.asc())
             .all()
@@ -1053,8 +1084,8 @@ def create_app(test_config=None):
 
             if not error:
                 try:
-                    start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                    start_date = parse_wager_date(start_date_raw)
+                    end_date = parse_wager_date(end_date_raw)
 
                     if end_date < start_date:
                         error = "End Date cannot be earlier than Start Date."
@@ -1076,8 +1107,15 @@ def create_app(test_config=None):
                         Task.query.filter(Task.id.in_(selected_task_ids_int)).all()
                     )
 
+                    already_linked_task = WagerTask.query.filter(
+                        WagerTask.task_id.in_(selected_task_ids_int),
+                        WagerTask.wager_id != wager.id,
+                    ).first()
+
                     if len(selected_tasks) != len(selected_task_ids_int):
                         error = "Some selected tasks do not exist."
+                    elif already_linked_task is not None:
+                        error = "Each task can only be linked to one wager."
                     elif any(task.team_id != wager.team_id for task in selected_tasks):
                         error = "Selected tasks must belong to the wager team."
                     else:
