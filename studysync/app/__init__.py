@@ -14,7 +14,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
 from app.time_utils import now_app_time, today_app_date
-from app.forms import LoginForm, RegisterForm
+from app.forms import LoginForm, RegisterForm, ChangePasswordForm
 
 
 db = SQLAlchemy()
@@ -38,8 +38,19 @@ def create_app(test_config=None):
     os.makedirs(app.instance_path, exist_ok=True)
 
     database_path = os.path.join(app.instance_path, "studysync.db")
+
+    if os.getenv("APP_ENV") == "production" and not os.getenv("SECRET_KEY"):
+        raise RuntimeError("SECRET_KEY must be set in production.")
+    
+    secret_key = os.getenv("SECRET_KEY")
+
+    if not secret_key and not app.debug:
+        raise RuntimeError(
+            "SECRET_KEY must be set when running outside debug mode."
+        )
+    
     app.config.from_mapping(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret-key"),
+        SECRET_KEY=secret_key or "dev-secret-key",
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         WTF_CSRF_ENABLED=True,
