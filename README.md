@@ -117,8 +117,10 @@ The Client is a thin local reverse proxy. It does not access the database direct
 Run it with:
 
 ```bash
-python3 client.py
+python3 deploy/client.py
 ```
+
+The old `python3 client.py` path still works as a legacy compatibility wrapper.
 
 Default Client settings:
 
@@ -142,6 +144,57 @@ The Client forwards all requests to the Host, so the existing login, dashboard, 
 ### Backward Compatibility
 
 The original `python3 run.py` command still starts the Host for compatibility.
+
+## 运行单元测试
+
+Install the runtime and development dependencies, then run pytest from the `studysync` directory:
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pytest
+```
+
+## 运行 E2E（Selenium）测试
+
+Start the live server in one terminal first:
+
+```bash
+python3 host.py
+```
+
+Then run the Selenium tests from the `studysync` directory in another terminal:
+
+```bash
+BASE_URL=http://127.0.0.1:5000 pytest -m e2e tests/e2e_selenium -q
+```
+
+You can change `BASE_URL` to point at another host or port if needed. The Selenium tests expect a browser and a driver. Selenium Manager can handle the driver automatically in recent Selenium versions; otherwise install ChromeDriver or another compatible driver for your browser.
+
+## 多人访问（cloudflared 内网穿透）
+
+If you want to let teammates access your local Host from outside your LAN, you can expose the running Flask server with cloudflared. The cloudflared binary is not bundled with this repository, so install it separately from the official Cloudflare release for your operating system.
+
+Run the Host locally first, then expose it:
+
+```bash
+python3 host.py
+cloudflared tunnel --url http://127.0.0.1:5000
+```
+
+If port `5000` is already in use, choose another Host port and point cloudflared at that address instead:
+
+```bash
+export HOST_PORT=5050
+python3 host.py
+cloudflared tunnel --url http://127.0.0.1:5050
+```
+
+Security reminders:
+
+- Do not expose the app with Flask debug mode enabled.
+- Always set a strong `SECRET_KEY` before sharing the tunnel URL.
+- Treat the tunnel URL as public access to your running app.
 
 ## End-to-End Testing
 

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - UWA StudySync{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Page header / navigation -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Notifications</h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Review task assignments, comments, and other updates.
+            </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('dashboard') }}"
+               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                <i class="fas fa-arrow-left text-xs"></i>
+                Back to Dashboard
+            </a>
+
+            {% if notifications and unread_count and unread_count > 0 %}
+            <form method="post" action="{{ url_for('notifications.mark_all_notifications_read') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <button type="submit"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition">
+                    <i class="fas fa-check-double text-xs"></i>
+                    Mark all as read
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if notifications %}
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900">Recent Notifications</h2>
+                <p class="text-sm text-gray-500">
+                    {{ unread_count }} unread notification{{ '' if unread_count == 1 else 's' }}
+                </p>
+            </div>
+        </div>
+
+        <div class="divide-y divide-gray-100">
+            {% for n in notifications %}
+            <form method="post"
+                  action="{{ url_for('notifications.open_notification', notification_id=n.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <button type="submit"
+                        class="w-full text-left flex items-start gap-4 px-5 py-4 transition hover:bg-gray-50
+                               {{ 'bg-indigo-50' if not n.is_read else 'bg-white' }}"
+                        aria-label="Open notification">
+                    <!-- Notification icon -->
+                    <div class="flex-shrink-0 mt-0.5">
+                        {% if n.type == 'comment' %}
+                        <span class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <i class="fas fa-comment-dots text-sm"></i>
+                        </span>
+                        {% elif n.type == 'task_assigned' %}
+                        <span class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                            <i class="fas fa-clipboard-check text-sm"></i>
+                        </span>
+                        {% else %}
+                        <span class="w-10 h-10 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center">
+                            <i class="fas fa-bell text-sm"></i>
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Notification content -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            {% if not n.is_read %}
+                            <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                            {% endif %}
+
+                            <p class="text-sm leading-6 {{ 'font-semibold text-gray-900' if not n.is_read else 'text-gray-700' }}">
+                                {{ n.message }}
+                            </p>
+                        </div>
+
+                        <p class="text-xs text-gray-400 mt-1">
+                            {% if n.created_at %}
+                                {{ n.created_at.strftime('%b %d, %Y · %H:%M') }}
+                            {% else %}
+                                Just now
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <div class="flex-shrink-0 flex items-center gap-2 text-sm font-semibold text-indigo-600 mt-1">
+                        Open
+                        <i class="fas fa-arrow-right text-xs"></i>
+                    </div>
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% else %}
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm text-center py-20 px-6">
+        <div class="w-16 h-16 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-bell-slash text-2xl"></i>
+        </div>
+
+        <p class="text-lg font-semibold text-gray-900">No notifications</p>
+        <p class="text-sm text-gray-500 mt-1">You're all caught up.</p>
+
+        <a href="{{ url_for('dashboard') }}"
+           class="inline-flex items-center gap-2 mt-6 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition">
+            <i class="fas fa-arrow-left text-xs"></i>
+            Back to Dashboard
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
