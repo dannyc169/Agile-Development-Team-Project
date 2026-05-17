@@ -15,8 +15,8 @@
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <!-- Filter Tabs -->
       <div class="flex gap-2">
-        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab"
-          data-filter="all" style="background-color: #4F46E5; color: white;">All</button>
+        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab bg-indigo-600 text-white"
+          data-filter="all">All</button>
         <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
           data-filter="todo">Todo</button>
         <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
@@ -152,7 +152,7 @@
               <input type="checkbox"
                 class="w-5 h-5 text-indigo-600 rounded cursor-pointer"
                 {{ 'checked' if task.status == 'done' else '' }}
-                onchange="this.form.submit()">
+                data-submit-on-change="true">
             </form>
             {% else %}
             <div class="mt-1 w-5 text-center">
@@ -180,7 +180,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="checkbox" class="w-4 h-4 rounded cursor-pointer"
                   {{ 'checked' if sub.is_done else '' }}
-                  onchange="this.form.submit()">
+                  data-submit-on-change="true">
               </form>
               <span class="text-xs flex-1 {{ 'line-through text-gray-400' if sub.is_done else 'text-gray-700' }}">{{ sub.title }}</span>
               <form method="POST" action="{{ url_for('tasks.delete_subtask', task_id=task.id, subtask_id=sub.id) }}">
@@ -382,213 +382,5 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script type="application/json" id="teamMembersData">{{ team_members_map | tojson }}</script>
-<script>
-  const datePickerOptions = {
-    dateFormat: "Y-m-d",
-    allowInput: false,
-    minDate: "2000-01-01",
-    maxDate: "2099-12-31"
-  };
-
-  const createDueDatePicker = flatpickr("#createDueDate", datePickerOptions);
-  const editDueDatePicker = flatpickr("#editDueDate", datePickerOptions);
-</script>
-<script>
-  // New Task panel — only rendered for leaders
-  const newTaskBtn = document.getElementById('newTaskBtn');
-  if (newTaskBtn) {
-    const teamMembersMap = JSON.parse(document.getElementById('teamMembersData').textContent);
-
-    const createTeamSelect = document.getElementById('createTeamId');
-    const assigneeField = document.getElementById('assigneeField');
-    const assigneeSelect = document.getElementById('assigneeSelect');
-    const newTaskPanel = document.getElementById('newTaskPanel');
-
-    function updateAssigneeField() {
-      const teamId = createTeamSelect.value;
-      const members = teamMembersMap[teamId];
-      if (members && members.length > 0) {
-        assigneeSelect.innerHTML = '<option value="">— No specific assignee —</option>';
-        members.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.id;
-          opt.textContent = m.username;
-          assigneeSelect.appendChild(opt);
-        });
-        assigneeField.classList.remove('hidden');
-      } else {
-        assigneeField.classList.add('hidden');
-        assigneeSelect.innerHTML = '';
-      }
-    }
-
-    createTeamSelect.addEventListener('change', updateAssigneeField);
-
-    newTaskBtn.addEventListener('click', () => {
-      newTaskPanel.classList.toggle('hidden');
-      updateAssigneeField();
-    });
-
-    document.getElementById('cancelBtn').addEventListener('click', () => {
-      newTaskPanel.classList.add('hidden');
-      createTeamSelect.value = '';
-      assigneeField.classList.add('hidden');
-      assigneeSelect.innerHTML = '';
-    });
-
-    const taskParams = new URLSearchParams(window.location.search);
-    const shouldOpenCreate = taskParams.get('open_create') === '1';
-    const preselectedTeamId = taskParams.get('team_id');
-
-    if (preselectedTeamId) {
-      createTeamSelect.value = preselectedTeamId;
-      updateAssigneeField();
-    }
-
-    if (shouldOpenCreate) {
-      newTaskPanel.classList.remove('hidden');
-    }
-  }
-
-  // Unified filter + search logic
-  let currentFilter = 'all';
-  let currentSearch = '';
-  let currentTeam = 'all';
-
-  function applyFilters() {
-    document.querySelectorAll('.task-card').forEach(card => {
-      let matchFilter;
-      if (currentFilter === 'all') {
-        matchFilter = true;
-      } else {
-        matchFilter = card.dataset.status === currentFilter;
-      }
-      const matchSearch = card.dataset.title.includes(currentSearch);
-      const matchTeam = currentTeam === 'all' || card.dataset.teamId === currentTeam;
-      card.style.display = (matchFilter && matchSearch && matchTeam) ? '' : 'none';
-    });
-
-    ['overdue-section', 'today-section', 'upcoming-section', 'done-section'].forEach(id => {
-      const section = document.getElementById(id);
-      if (!section) return;
-      const hasVisible = Array.from(section.querySelectorAll('.task-card')).some(c => c.style.display !== 'none');
-      section.style.display = hasVisible ? '' : 'none';
-    });
-  }
-
-  document.getElementById('teamFilter').addEventListener('change', function () {
-    currentTeam = this.value;
-    applyFilters();
-  });
-
-  // Filter tabs
-  document.querySelectorAll('.filter-tab').forEach(tab => {
-    tab.addEventListener('click', function () {
-      document.querySelectorAll('.filter-tab').forEach(t => {
-        t.style.backgroundColor = 'transparent';
-        t.style.color = '';
-        t.classList.add('text-gray-700');
-        t.classList.remove('text-white');
-      });
-      this.style.backgroundColor = '#4F46E5';
-      this.style.color = 'white';
-      this.classList.remove('text-gray-700');
-      this.classList.add('text-white');
-      currentFilter = this.dataset.filter;
-      applyFilters();
-    });
-  });
-
-  // Search
-  document.getElementById('searchInput').addEventListener('input', function () {
-    currentSearch = this.value.toLowerCase();
-    applyFilters();
-  });
-
-  // Edit / view task modal.
-  // Task creators can edit task details. Status is changed only through completion/subtasks.
-  // Assigned members get a read-only detail view.
-  const editModal = document.getElementById('editModal');
-  const editForm = document.getElementById('editForm');
-
-  const editModalTitle = document.getElementById('editModalTitle');
-  const editTitle = document.getElementById('editTitle');
-  const editDescription = document.getElementById('editDescription');
-  const editDueDate = document.getElementById('editDueDate');
-  const editPriority = document.getElementById('editPriority');
-  const editPriorityHidden = document.getElementById('editPriorityHidden');
-  const priorityLockedNote = document.getElementById('priorityLockedNote');
-  const editTeamLabel = document.getElementById('editTeamLabel');
-  const editTeamId = document.getElementById('editTeamId');
-  const editTeamDisplay = document.getElementById('editTeamDisplay');
-  const editSubmitBtn = document.getElementById('editSubmitBtn');
-  const closeEditModal = document.getElementById('closeEditModal');
-
-  function setReadOnlyClasses(field, isReadOnly) {
-    field.classList.toggle('bg-gray-50', isReadOnly);
-    field.classList.toggle('text-gray-700', isReadOnly);
-    field.classList.toggle('cursor-not-allowed', isReadOnly);
-  }
-
-  function setModalReadOnly(isReadOnly) {
-    editModalTitle.textContent = isReadOnly ? 'View Task Detail' : 'Edit Task';
-
-    editTitle.readOnly = isReadOnly;
-    editDescription.readOnly = isReadOnly;
-    editDueDate.disabled = isReadOnly;
-    editPriority.disabled = isReadOnly;
-    // In read-only mode, show that priority is controlled by the team leader.
-    priorityLockedNote.classList.toggle('hidden', !isReadOnly);
-
-    editTeamLabel.textContent = isReadOnly ? 'Assigned Team' : 'Assign to Team';
-    editTeamId.classList.toggle('hidden', isReadOnly);
-    editTeamId.disabled = isReadOnly;
-    editTeamDisplay.classList.toggle('hidden', !isReadOnly);
-
-    editSubmitBtn.classList.toggle('hidden', isReadOnly);
-    closeEditModal.textContent = isReadOnly ? 'Close' : 'Cancel';
-
-    [editTitle, editDescription, editDueDate, editPriority, editTeamId].forEach(field => {
-      setReadOnlyClasses(field, isReadOnly);
-    });
-  }
-
-  document.querySelectorAll('.edit-btn').forEach(btn => {
-    btn.addEventListener('click', function () {
-      const id = this.dataset.taskId;
-      const isReadOnly = this.dataset.readOnly === '1';
-
-      editForm.action = isReadOnly ? '#' : `/tasks/${id}/edit`;
-      editTitle.value = this.dataset.title;
-      editDescription.value = this.dataset.description;
-      editDueDatePicker.setDate(this.dataset.dueDate || null);
-      editPriority.value = this.dataset.priority;
-      editTeamId.value = this.dataset.teamId;
-      editTeamDisplay.value = this.dataset.teamName || 'No Team';
-
-      // The hidden priority input was only needed for the old partial-lock edit mode.
-      // In read-only view, the form cannot submit; in edit mode, the select is enabled.
-      editPriorityHidden.disabled = true;
-      editPriorityHidden.value = this.dataset.priority;
-
-      setModalReadOnly(isReadOnly);
-      editModal.classList.remove('hidden');
-    });
-  });
-
-  editForm.addEventListener('submit', function (event) {
-    if (editSubmitBtn.classList.contains('hidden')) {
-      event.preventDefault();
-    }
-  });
-
-  closeEditModal.addEventListener('click', () => {
-    editModal.classList.add('hidden');
-  });
-
-  // Close modal clicking outside
-  editModal.addEventListener('click', function (e) {
-    if (e.target === this) this.classList.add('hidden');
-  });
-</script>
+<script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
 {% endblock %}
