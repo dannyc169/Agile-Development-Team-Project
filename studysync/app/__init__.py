@@ -11,6 +11,7 @@ from flask_login import (
 )
 from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from sqlalchemy import and_, or_
 
 from app.time_utils import now_app_time, today_app_date
@@ -18,6 +19,7 @@ from app.forms import LoginForm, RegisterForm, ChangePasswordForm
 
 
 db = SQLAlchemy()
+migrate = Migrate()
 login_manager = LoginManager()
 csrf = CSRFProtect()
 
@@ -55,6 +57,7 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     db.init_app(app)
+    migrate.init_app(app, db)
     login_manager.init_app(app)
     login_manager.login_view = "login"
     login_manager.login_message = "Please log in to continue."
