@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, date, timezone
+from datetime import datetime
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_login import (
@@ -13,7 +13,8 @@ from flask_wtf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
-from app.forms import ChangePasswordForm, LoginForm, RegisterForm, ResetPasswordForm
+from app.time_utils import now_app_time, today_app_date
+from app.forms import LoginForm, RegisterForm
 
 
 db = SQLAlchemy()
@@ -38,7 +39,7 @@ def create_app():
 
     database_path = os.path.join(app.instance_path, "studysync.db")
     app.config.from_mapping(
-        SECRET_KEY="dev-secret-key",
+        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret-key"),
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         WTF_CSRF_ENABLED=True,
@@ -57,6 +58,7 @@ def create_app():
         Team,
         TeamMember,
         Task,
+        Activity,
         Notification,  # noqa: F401
         Wager,
         WagerParticipant,
@@ -73,10 +75,16 @@ def create_app():
         calculate_total_points,
         calculate_wager_points,
         calculate_wager_progress,
+        calculate_wager_user_progress,
         count_wagers_won_for_user,
+        get_active_personal_wagers_for_user,
         get_badge_for_points,
+        get_personal_wagers_for_user,
+        get_team_wagers_for_leader,
         resolve_linked_task,
         sync_wager_status,
+        user_can_view_team_wagers,
+        user_owns_or_is_assigned_task,
     )
 
     app.register_blueprint(teams_bp)
@@ -118,6 +126,7 @@ def create_app():
             "completed": "bg-green-100 text-green-700",
             "at_risk": "bg-yellow-200 text-yellow-800",
             "failed": "bg-red-200 text-red-800",
+            "no_tasks": "bg-gray-100 text-gray-600",
         }
 
         return mapping.get(status, "bg-gray-100 text-gray-700")
@@ -128,6 +137,7 @@ def create_app():
             "completed": "bg-green-500",
             "at_risk": "bg-yellow-500",
             "failed": "bg-red-500",
+            "no_tasks": "bg-gray-300",
         }
 
         return mapping.get(status, "bg-gray-400")
@@ -169,16 +179,22 @@ def create_app():
 
         return tasks
 
-    def calculate_wager_status_key(wager, status_counts, total_participants):
-        today = date.today()
+    def calculate_wager_status_key(
+        wager,
+        status_counts,
+        team_tasks_done,
+        team_tasks_total,
+    ):
+        """Return the overall wager status based on team-level progress."""
+        today = today_app_date()
 
-        if total_participants > 0 and status_counts["completed"] == total_participants:
+        if team_tasks_total > 0 and team_tasks_done >= team_tasks_total:
             return "completed"
 
         if (
             wager.end_date is not None
             and today > wager.end_date
-            and status_counts["completed"] < total_participants
+            and team_tasks_done < team_tasks_total
         ):
             return "failed"
 
@@ -198,14 +214,42 @@ def create_app():
         return mapping.get(status_key, "ACTIVE")
 
     def build_wager_view_data(wager):
-        total_tasks, tasks_done_for_wager, progress_percent = calculate_wager_progress(wager)
+        """Build display data for the wager detail page.
+
+        The wager itself still uses team-level progress because linked tasks are
+        shared by the whole team. Participant rows and the current user's status
+        use personal progress so assigned tasks only count for the assignee.
+        """
+        total_tasks, tasks_done_for_wager, progress_percent = calculate_wager_progress(
+            wager
+        )
         total_participants = len(wager.participants)
 
         points_earned = calculate_wager_points(wager)
         total_possible_points = total_tasks * POINTS_PER_TASK
         badge = get_badge_for_points(points_earned)
 
-        today = date.today()
+        current_user_tasks_total = 0
+        current_user_tasks_done = 0
+        current_user_progress = 0
+        current_user_points = 0
+        current_user_total_possible_points = 0
+        current_user_badge = get_badge_for_points(0)
+
+        if current_user.is_authenticated:
+            (
+                current_user_tasks_total,
+                current_user_tasks_done,
+                current_user_progress,
+            ) = calculate_wager_user_progress(wager, current_user.id)
+
+            current_user_points = current_user_tasks_done * POINTS_PER_TASK
+            current_user_total_possible_points = (
+                current_user_tasks_total * POINTS_PER_TASK
+            )
+            current_user_badge = get_badge_for_points(current_user_points)
+
+        today = today_app_date()
 
         participants_view = []
         status_counts = {
@@ -216,9 +260,18 @@ def create_app():
         }
 
         for idx, participant in enumerate(wager.participants):
+            (
+                personal_tasks_total,
+                personal_tasks_done,
+                personal_progress,
+            ) = calculate_wager_user_progress(wager, participant.user_id)
+
+            personal_points = personal_tasks_done * POINTS_PER_TASK
+            personal_badge = get_badge_for_points(personal_points)
+
             display_status = calculate_participant_status(
-                tasks_done_for_wager,
-                total_tasks,
+                personal_tasks_done,
+                personal_tasks_total,
                 wager.end_date,
             )
 
@@ -231,14 +284,14 @@ def create_app():
                     "name": username,
                     "avatar": username[0].upper() if username else "?",
                     "avatar_color": avatar_color_for_index(idx),
-                    "tasks_done": tasks_done_for_wager,
-                    "tasks_total": total_tasks,
-                    "progress": progress_percent,
+                    "tasks_done": personal_tasks_done,
+                    "tasks_total": personal_tasks_total,
+                    "progress": personal_progress,
                     "status": display_status.replace("_", " ").title(),
                     "status_class": participant_status_class(display_status),
-                    "reward": points_earned,
-                    "points": points_earned,
-                    "badge": badge,
+                    "reward": personal_points,
+                    "points": personal_points,
+                    "badge": personal_badge,
                     "row_class": participant_row_class(display_status),
                     "name_class": participant_name_class(display_status),
                     "done_class": participant_done_class(display_status),
@@ -257,7 +310,12 @@ def create_app():
             days_over = (today - wager.end_date).days
             time_remaining = f"Overdue by {days_over}d"
 
-        status_key = calculate_wager_status_key(wager, status_counts, total_participants)
+        status_key = calculate_wager_status_key(
+            wager,
+            status_counts,
+            tasks_done_for_wager,
+            total_tasks,
+        )
         status_label = calculate_wager_status_label(status_key)
 
         wager_view = {
@@ -267,7 +325,9 @@ def create_app():
             "status_key": status_key,
             "team": wager.team.name if wager.team else "",
             "time_remaining": time_remaining,
-            "participants_on_track": status_counts["on_track"] + status_counts["completed"],
+            "participants_on_track": (
+                status_counts["on_track"] + status_counts["completed"]
+            ),
             "total_participants": total_participants,
             "overall_progress": overall_progress,
             "goal": wager.description,
@@ -280,7 +340,9 @@ def create_app():
             "penalty_rule": "Incomplete linked tasks do not earn points",
             "reward_rule": f"Each completed linked task gives {POINTS_PER_TASK} points",
             "created_by": wager.creator.username if wager.creator else "",
-            "can_manage": current_user.is_authenticated and wager.creator_id == current_user.id,
+            "can_manage": (
+                current_user.is_authenticated and wager.creator_id == current_user.id
+            ),
 
             # Backward-compatible keys for older templates.
             # These should be renamed in templates later.
@@ -301,63 +363,173 @@ def create_app():
 
         if current_membership:
             current_status = calculate_participant_status(
-                tasks_done_for_wager,
-                total_tasks,
+                current_user_tasks_done,
+                current_user_tasks_total,
                 wager.end_date,
             )
 
-            if current_status == "completed":
+            if current_user_tasks_total == 0:
+                user_status_text = "No linked task assigned to you yet"
+                user_status_subtext = (
+                    "You will earn points when a linked task is assigned to you "
+                    "and completed."
+                )
+                user_status_color = "text-gray-600"
+            elif current_status == "completed":
                 user_status_text = "You are COMPLETED ✅"
                 user_status_subtext = (
-                    f"Your team has finished all linked tasks and earned "
-                    f"{points_earned} points."
+                    "You have completed your linked task contribution and earned "
+                    f"{current_user_points} points."
                 )
                 user_status_color = "text-green-600"
             elif current_status == "at_risk":
                 user_status_text = "You are AT RISK ⚠️"
-                user_status_subtext = "The deadline is close and there is still work remaining."
+                user_status_subtext = (
+                    "The deadline is close and your linked tasks are not complete yet."
+                )
                 user_status_color = "text-yellow-600"
             elif current_status == "failed":
                 user_status_text = "You have FAILED ❌"
-                user_status_subtext = "This wager has been missed."
+                user_status_subtext = (
+                    "Your linked tasks were not completed before the deadline."
+                )
                 user_status_color = "text-red-600"
             else:
-                remaining = max(total_tasks - tasks_done_for_wager, 0)
+                remaining = max(current_user_tasks_total - current_user_tasks_done, 0)
                 user_status_text = "You are ON TRACK 🎉"
                 user_status_subtext = f"Keep going! {remaining} task(s) remaining."
                 user_status_color = "text-green-600"
 
         user_status_view = {
-            "tasks_done": tasks_done_for_wager,
-            "tasks_total": total_tasks,
+            "tasks_done": current_user_tasks_done,
+            "tasks_total": current_user_tasks_total,
             "status_text": user_status_text,
             "status_subtext": user_status_subtext,
             "status_color": user_status_color,
-            "points_earned": points_earned,
-            "total_possible_points": total_possible_points,
+            "progress": current_user_progress,
+            "points_earned": current_user_points,
+            "total_possible_points": current_user_total_possible_points,
             "points_per_task": POINTS_PER_TASK,
-            "badge": badge,
+            "badge": current_user_badge,
             "required_tasks": get_required_tasks_for_wager(wager),
 
             # Backward-compatible keys for older templates.
-            "stake_frozen": total_possible_points,
-            "potential_reward": points_earned,
+            "stake_frozen": current_user_total_possible_points,
+            "potential_reward": current_user_points,
         }
 
         return wager_view, participants_view, user_status_view
 
-    def build_dashboard_wager_card(user_id):
-        today = date.today()
+    def build_participant_status_overview(wagers):
+        """Build one page-level participant status overview.
 
-        wagers = (
-            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-            .filter(TeamMember.user_id == user_id)
-            .order_by(Wager.created_at.desc())
-            .all()
-        )
+        The overview aggregates each participant's own linked tasks across the
+        wagers visible to the current user. Assigned tasks count only for the
+        assignee, while unassigned tasks count for the creator.
+        """
+        participant_map = {}
 
         for wager in wagers:
-            total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
+            for participant in wager.participants:
+                user = participant.user
+
+                if user is None:
+                    continue
+
+                if user.id not in participant_map:
+                    participant_map[user.id] = {
+                        "user_id": user.id,
+                        "name": user.username,
+                        "avatar": user.username[:1].upper() if user.username else "?",
+                        "_task_ids": set(),
+                        "_done_task_ids": set(),
+                    }
+
+            for link in wager.linked_tasks:
+                linked_task = resolve_linked_task(link, wager)
+
+                if linked_task is None:
+                    continue
+
+                for participant in wager.participants:
+                    user = participant.user
+
+                    if user is None:
+                        continue
+
+                    if not user_owns_or_is_assigned_task(linked_task, user.id):
+                        continue
+
+                    participant_map[user.id]["_task_ids"].add(linked_task.id)
+
+                    if linked_task.status == "done":
+                        participant_map[user.id]["_done_task_ids"].add(
+                            linked_task.id
+                        )
+
+        rows = []
+
+        for item in participant_map.values():
+            tasks_total = len(item["_task_ids"])
+            tasks_done = len(item["_done_task_ids"])
+            points = tasks_done * POINTS_PER_TASK
+            badge = get_badge_for_points(points)
+
+            if tasks_total == 0:
+                progress = 0
+                status_key = "no_tasks"
+                status_label = "No Tasks"
+            elif tasks_done >= tasks_total:
+                progress = 100
+                status_key = "completed"
+                status_label = "Completed"
+            else:
+                progress = min(100, int((tasks_done / tasks_total) * 100))
+                status_key = "on_track"
+                status_label = "In Progress"
+
+            rows.append(
+                {
+                    "user_id": item["user_id"],
+                    "name": item["name"],
+                    "avatar": item["avatar"],
+                    "tasks_done": tasks_done,
+                    "tasks_total": tasks_total,
+                    "progress": progress,
+                    "status": status_label,
+                    "status_class": participant_status_class(status_key),
+                    "points": points,
+                    "badge": badge,
+                    "row_class": "",
+                    "name_class": "text-gray-900",
+                    "done_class": "text-gray-600",
+                    "progress_class": participant_progress_class(status_key),
+                }
+            )
+
+        rows.sort(
+            key=lambda row: (
+                -row["points"],
+                -row["tasks_done"],
+                row["name"].lower(),
+            )
+        )
+
+        for index, row in enumerate(rows):
+            row["avatar_color"] = avatar_color_for_index(index)
+
+        return rows
+
+    def build_dashboard_wager_card(user_id):
+        """Build the Dashboard active wager card for the current user's own wagers."""
+        today = today_app_date()
+
+        # Dashboard is a personal page. Even leaders should only see wagers that
+        # are personally relevant to them here, not every team member's wager.
+        wagers = get_active_personal_wagers_for_user(user_id)
+
+        for wager in wagers:
+            total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
             if total_tasks > 0 and done_tasks >= total_tasks:
                 continue
@@ -371,14 +543,18 @@ def create_app():
             else:
                 time_remaining = "No deadline"
 
-            points_earned = calculate_wager_points(wager)
-            total_possible_points = total_tasks * POINTS_PER_TASK
+            user_total_tasks, user_done_tasks, user_progress_percent = (
+                calculate_wager_user_progress(wager, user_id)
+            )
+
+            points_earned = user_done_tasks * POINTS_PER_TASK
+            total_possible_points = user_total_tasks * POINTS_PER_TASK
 
             return {
                 "id": wager.id,
                 "title": wager.title,
                 "time_remaining": time_remaining,
-                "progress_percent": progress_percent,
+                "progress_percent": user_progress_percent,
                 "points_earned": points_earned,
                 "total_possible_points": total_possible_points,
                 "points_per_task": POINTS_PER_TASK,
@@ -388,6 +564,71 @@ def create_app():
             }
 
         return None
+
+    def build_dashboard_team_progress(user_id):
+        """Build real team task completion progress for the dashboard."""
+        memberships = TeamMember.query.filter_by(user_id=user_id).all()
+        progress_rows = []
+
+        for membership in memberships:
+            team = membership.team
+
+            if team is None:
+                continue
+
+            tasks = Task.query.filter_by(team_id=team.id).all()
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for task in tasks if task.status == "done")
+
+            progress_percent = (
+                int((completed_tasks / total_tasks) * 100)
+                if total_tasks > 0
+                else 0
+            )
+
+            progress_rows.append(
+                {
+                    "team_id": team.id,
+                    "team_name": team.name,
+                    "completed_tasks": completed_tasks,
+                    "total_tasks": total_tasks,
+                    "progress_percent": progress_percent,
+                }
+            )
+
+        progress_rows.sort(key=lambda row: row["team_name"].lower())
+        return progress_rows
+
+    def build_dashboard_recent_activities(user_id, limit=5):
+        """Build recent activity rows from teams the user belongs to."""
+        memberships = TeamMember.query.filter_by(user_id=user_id).all()
+        team_ids = [membership.team_id for membership in memberships]
+
+        if not team_ids:
+            return []
+
+        activities = (
+            Activity.query.filter(Activity.team_id.in_(team_ids))
+            .order_by(Activity.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "message": activity.message,
+                "team_name": activity.team.name if activity.team else "Team activity",
+                "actor_name": activity.user.username if activity.user else "StudySync",
+                "actor_initial": (
+                    activity.user.username[:1].upper()
+                    if activity.user and activity.user.username
+                    else "S"
+                ),
+                "created_at": activity.created_at,
+            }
+            for activity in activities
+        ]
+
 
     @app.context_processor
     def inject_global_points():
@@ -417,7 +658,7 @@ def create_app():
     @app.route("/dashboard")
     @login_required
     def dashboard():
-        now = datetime.now(timezone.utc)
+        now = now_app_time()
         today = now.date()
 
         all_tasks = Task.query.filter(
@@ -425,7 +666,7 @@ def create_app():
                 Task.assigned_to_user_id == current_user.id,
                 and_(
                     Task.user_id == current_user.id,
-                    Task.assigned_to_user_id == None,
+                    Task.assigned_to_user_id.is_(None),
                 ),
             )
         ).all()
@@ -445,6 +686,8 @@ def create_app():
         wagers_won_count = count_wagers_won_for_user(current_user.id)
         current_points = calculate_total_points(current_user.id)
         current_badge = get_badge_for_points(current_points)
+        team_progress_rows = build_dashboard_team_progress(current_user.id)
+        recent_activities = build_dashboard_recent_activities(current_user.id)
 
         return render_template(
             "dashboard/index.html",
@@ -457,47 +700,115 @@ def create_app():
             wagers_won_count=wagers_won_count,
             current_points=current_points,
             current_badge=current_badge,
+            team_progress_rows=team_progress_rows,
+            recent_activities=recent_activities,
         )
 
     @app.route("/wagers")
     @login_required
     def wagers_detail():
-        wagers = (
-            Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-            .filter(TeamMember.user_id == current_user.id)
-            .order_by(Wager.created_at.desc())
-            .all()
-        )
-
-        if not wagers:
-            flash("No wager exists yet. Please create one first.", "info")
-            return redirect(url_for("create_wager"))
-
+        """Display the Wager page with scope and team filters.
+    
+        Scope rules:
+        - Personal: everyone sees only their own wagers.
+        - Team Members: leaders can view all wagers from teams they lead.
+    
+        Team filter rules:
+        - Personal scope: filter by teams the current user belongs to.
+        - Team Members scope: filter by teams the current user leads.
+        """
+        requested_scope = request.args.get("scope", "personal")
+        selected_team_raw = request.args.get("team_id", "all")
+    
+        can_view_team_wagers = user_can_view_team_wagers(current_user.id)
+    
+        memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
+        all_user_teams = [membership.team for membership in memberships]
+        leader_team_ids = {
+            membership.team_id
+            for membership in memberships
+            if membership.role == "leader"
+        }
+    
+        if requested_scope == "team" and can_view_team_wagers:
+            scope = "team"
+            team_filter_teams = [
+                team for team in all_user_teams
+                if team and team.id in leader_team_ids
+            ]
+            wagers = get_team_wagers_for_leader(current_user.id)
+        else:
+            scope = "personal"
+            team_filter_teams = [
+                team for team in all_user_teams
+                if team is not None
+            ]
+            wagers = get_personal_wagers_for_user(current_user.id)
+    
+        allowed_team_ids = {team.id for team in team_filter_teams}
+        selected_team_id = None
+    
+        if selected_team_raw and selected_team_raw != "all":
+            try:
+                candidate_team_id = int(selected_team_raw)
+    
+                if candidate_team_id in allowed_team_ids:
+                    selected_team_id = candidate_team_id
+            except ValueError:
+                selected_team_id = None
+    
+        if selected_team_id is not None:
+            wagers = [
+                wager for wager in wagers
+                if wager.team_id == selected_team_id
+            ]
+    
         sections = {
             "active": [],
             "completed": [],
             "failed": [],
         }
+        
+        overview_team_ids = list(allowed_team_ids)
 
+        if selected_team_id is not None:
+            overview_team_ids = [selected_team_id]
+        
+        overview_wagers = []
+        
+        if overview_team_ids:
+            overview_wagers = (
+                Wager.query.filter(Wager.team_id.in_(overview_team_ids))
+                .order_by(Wager.created_at.desc())
+                .all()
+            )
+        
+        participant_overview = build_participant_status_overview(overview_wagers)
+    
         for wager in wagers:
             wager_view, participants_view, user_status_view = build_wager_view_data(wager)
-
+    
             item = {
                 "wager": wager_view,
                 "participants": participants_view,
                 "user_status": user_status_view,
             }
-
+    
             if wager_view["status_key"] == "completed":
                 sections["completed"].append(item)
             elif wager_view["status_key"] == "failed":
                 sections["failed"].append(item)
             else:
                 sections["active"].append(item)
-
+    
         return render_template(
             "wagers/detail.html",
             sections=sections,
+            participant_overview=participant_overview,
+            scope=scope,
+            can_view_team_wagers=can_view_team_wagers,
+            team_filter_teams=team_filter_teams,
+            selected_team_id=selected_team_id,
         )
 
     @app.route("/wagers/create", methods=["GET", "POST"])
@@ -930,29 +1241,23 @@ def create_app():
 
     @app.route("/reset-password", methods=["GET", "POST"])
     def reset_password():
+        """
+        Disable public password reset for the MVP.
+    
+        A secure reset flow requires email/token verification. The previous
+        demo-style reset allowed passwords to be changed with only a username
+        or email, which creates an account takeover risk.
+        """
+        flash(
+            "Password reset is not available in the MVP. "
+            "If you can log in, please change your password from Account settings.",
+            "info",
+        )
+    
         if current_user.is_authenticated:
             return redirect(url_for("dashboard"))
-
-        form = ResetPasswordForm()
-
-        if form.validate_on_submit():
-            identifier = form.username_or_email.data.strip()
-
-            user = User.query.filter_by(username=identifier).first()
-            if user is None:
-                user = User.query.filter_by(email=identifier).first()
-
-            if user is None:
-                flash("User not found.", "error")
-                return render_template("auth/reset_password.html", form=form)
-
-            user.set_password(form.new_password.data)
-            db.session.commit()
-
-            flash("Password updated, please login.", "success")
-            return redirect(url_for("login"))
-
-        return render_template("auth/reset_password.html", form=form)
+    
+        return redirect(url_for("login"))
 
     @app.route("/health")
     def health():

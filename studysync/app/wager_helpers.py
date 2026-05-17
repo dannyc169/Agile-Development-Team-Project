@@ -1,6 +1,4 @@
-from datetime import date
-
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app import db
 from app.models import (
@@ -11,6 +9,7 @@ from app.models import (
     WagerParticipant,
     WagerTask,
 )
+from app.time_utils import today_app_date
 
 
 POINTS_PER_TASK = 10
@@ -18,18 +17,19 @@ POINTS_PER_TASK = 10
 
 def _task_user_filter(user_id):
     """
-    Match tasks that belong to a user.
+    Match tasks that should count as this user's own contribution.
 
-    This includes:
-    - tasks created by the user
-    - tasks assigned to the user, if assigned_to_user_id exists in the model
+    Rule:
+    - If a task is assigned to someone, only the assignee gets the points.
+    - If a task has no assignee, the creator gets the points.
     """
-    filters = [Task.user_id == user_id]
-
-    if hasattr(Task, "assigned_to_user_id"):
-        filters.append(Task.assigned_to_user_id == user_id)
-
-    return or_(*filters)
+    return or_(
+        Task.assigned_to_user_id == user_id,
+        and_(
+            Task.assigned_to_user_id.is_(None),
+            Task.user_id == user_id,
+        ),
+    )
 
 
 def user_owns_or_is_assigned_task(task, user_id):
@@ -37,14 +37,12 @@ def user_owns_or_is_assigned_task(task, user_id):
     if task is None:
         return False
 
-    if task.user_id == user_id:
-        return True
-
     assigned_to_user_id = getattr(task, "assigned_to_user_id", None)
-    if assigned_to_user_id == user_id:
-        return True
 
-    return False
+    if assigned_to_user_id is not None:
+        return assigned_to_user_id == user_id
+
+    return task.user_id == user_id
 
 
 def resolve_linked_task(link, wager):
@@ -75,7 +73,7 @@ def count_done_tasks_for_wager(wager):
     """
     Count completed linked tasks for a team-level wager.
 
-    This is used for team wager progress.
+    This is used for overall wager progress.
     It does not represent one user's personal contribution.
     """
     done_count = 0
@@ -112,14 +110,15 @@ def calculate_wager_points(wager):
     return done_tasks * POINTS_PER_TASK
 
 
-def calculate_wager_points_for_user(wager, user_id):
+def calculate_wager_user_progress(wager, user_id):
     """
-    Calculate points a specific user earned from one wager.
+    Calculate one user's personal progress for a wager.
 
-    Personal points are based only on the user's own completed linked tasks:
-    - created by the user, or
-    - assigned to the user if assigned_to_user_id exists.
+    Personal progress uses the same attribution rule as personal points:
+    - assigned tasks count for the assignee only
+    - unassigned tasks count for the creator only
     """
+    personal_task_ids = set()
     completed_task_ids = set()
 
     for link in wager.linked_tasks:
@@ -128,15 +127,32 @@ def calculate_wager_points_for_user(wager, user_id):
         if linked_task is None:
             continue
 
-        if linked_task.status != "done":
-            continue
-
         if not user_owns_or_is_assigned_task(linked_task, user_id):
             continue
 
-        completed_task_ids.add(linked_task.id)
+        personal_task_ids.add(linked_task.id)
 
-    return len(completed_task_ids) * POINTS_PER_TASK
+        if linked_task.status == "done":
+            completed_task_ids.add(linked_task.id)
+
+    total_tasks = len(personal_task_ids)
+    done_tasks = len(completed_task_ids)
+
+    if total_tasks == 0:
+        return 0, 0, 0
+
+    progress_percent = min(100, int((done_tasks / total_tasks) * 100))
+    return total_tasks, done_tasks, progress_percent
+
+
+def calculate_wager_points_for_user(wager, user_id):
+    """Calculate points a specific user earned from one wager."""
+    _total_tasks, done_tasks, _progress_percent = calculate_wager_user_progress(
+        wager,
+        user_id,
+    )
+
+    return done_tasks * POINTS_PER_TASK
 
 
 def count_completed_linked_tasks_for_user(user_id, team_ids=None):
@@ -144,7 +160,7 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
     Count completed linked tasks that belong to a user.
 
     This is used for leaderboard and personal points.
-    It counts tasks created by the user and assigned to the user.
+    It counts assigned tasks for the assignee, and unassigned tasks for the creator.
     """
     query = (
         db.session.query(Task.id)
@@ -168,8 +184,8 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
 
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):
-    """Calculate participant status for a team-level wager."""
-    today = date.today()
+    """Calculate participant status for team-level or personal wager progress."""
+    today = today_app_date()
 
     if tasks_total > 0 and tasks_done >= tasks_total:
         return "completed"
@@ -231,20 +247,20 @@ def sync_wager_status(wager):
     This function only updates SQLAlchemy objects.
     The caller is responsible for db.session.commit().
 
-    Team progress is shared by all participants, but personal points are based
-    on each participant's own completed linked tasks.
+    Team status is shared at the wager level, but participant progress,
+    status, and rewards are based on each participant's own linked tasks.
     """
-    total_tasks, done_tasks, progress_percent = calculate_wager_progress(wager)
+    total_tasks, done_tasks, _progress_percent = calculate_wager_progress(wager)
 
-    participant_status = calculate_participant_status(
+    team_status = calculate_participant_status(
         done_tasks,
         total_tasks,
         wager.end_date,
     )
 
-    if participant_status == "completed":
+    if team_status == "completed":
         wager_status = "completed"
-    elif participant_status == "failed":
+    elif team_status == "failed":
         wager_status = "failed"
     else:
         wager_status = "active"
@@ -256,17 +272,29 @@ def sync_wager_status(wager):
         changed = True
 
     for participant in wager.participants:
-        personal_points = calculate_wager_points_for_user(
+        (
+            personal_total_tasks,
+            personal_done_tasks,
+            personal_progress,
+        ) = calculate_wager_user_progress(
             wager,
             participant.user_id,
         )
 
-        if participant.progress != progress_percent:
-            participant.progress = progress_percent
+        personal_status = calculate_participant_status(
+            personal_done_tasks,
+            personal_total_tasks,
+            wager.end_date,
+        )
+
+        personal_points = personal_done_tasks * POINTS_PER_TASK
+
+        if participant.progress != personal_progress:
+            participant.progress = personal_progress
             changed = True
 
-        if participant.status != participant_status:
-            participant.status = participant_status
+        if participant.status != personal_status:
+            participant.status = personal_status
             changed = True
 
         if participant.reward_amount != personal_points:
@@ -329,29 +357,104 @@ def user_is_wager_participant(user_id, wager_id):
     return participant is not None
 
 
-def get_wagers_for_user(user_id, team_ids=None):
+def get_personal_wagers_for_user(user_id, team_ids=None):
     """
-    Get wagers visible to a user.
+    Return wagers that personally belong to the user.
 
-    If team_ids is provided, only wagers in those teams are returned.
-    Otherwise, return wagers from teams that the user belongs to.
+    A personal wager means the user has at least one linked task in the wager:
+    - assigned tasks belong to the assignee only
+    - unassigned tasks belong to the creator only
+
+    This avoids showing every team wager just because the user is a team member
+    or was added as a wager participant.
     """
+    query = (
+        Wager.query.join(WagerTask, WagerTask.wager_id == Wager.id)
+        .join(Task, Task.id == WagerTask.task_id)
+        .filter(_task_user_filter(user_id))
+    )
+
     if team_ids is not None:
         if not team_ids:
             return []
 
-        return Wager.query.filter(Wager.team_id.in_(team_ids)).all()
+        query = query.filter(Wager.team_id.in_(team_ids))
+
+    return query.distinct().order_by(Wager.created_at.desc()).all()
+
+
+def get_active_personal_wagers_for_user(user_id, team_ids=None):
+    """
+    Return active wagers that personally belong to the user.
+
+    This should be used by personal pages such as Dashboard and Activity Feed.
+    Leaders should still only see their own active wagers on those pages.
+    """
+    query = (
+        Wager.query.join(WagerTask, WagerTask.wager_id == Wager.id)
+        .join(Task, Task.id == WagerTask.task_id)
+        .filter(
+            Wager.status == "active",
+            _task_user_filter(user_id),
+        )
+    )
+
+    if team_ids is not None:
+        if not team_ids:
+            return []
+
+        query = query.filter(Wager.team_id.in_(team_ids))
+
+    return query.distinct().order_by(Wager.created_at.desc()).all()
+
+
+def get_leader_team_ids(user_id):
+    """Return team IDs where the user is the leader."""
+    memberships = TeamMember.query.filter_by(
+        user_id=user_id,
+        role="leader",
+    ).all()
+
+    return [membership.team_id for membership in memberships]
+
+
+def user_can_view_team_wagers(user_id):
+    """Return whether the user can view team member wagers."""
+    return bool(get_leader_team_ids(user_id))
+
+
+def get_team_wagers_for_leader(user_id):
+    """
+    Return all wagers from teams led by the user.
+
+    This should only be used on the Wager page when the leader selects the
+    Team Members view.
+    """
+    leader_team_ids = get_leader_team_ids(user_id)
+
+    if not leader_team_ids:
+        return []
 
     return (
-        Wager.query.join(TeamMember, Wager.team_id == TeamMember.team_id)
-        .filter(TeamMember.user_id == user_id)
+        Wager.query.filter(Wager.team_id.in_(leader_team_ids))
+        .order_by(Wager.created_at.desc())
         .all()
     )
 
 
+def get_wagers_for_user(user_id, team_ids=None):
+    """
+    Backward-compatible wrapper for personal wagers.
+
+    By default, this now returns only wagers that personally belong to the user,
+    not every wager from teams the user belongs to.
+    """
+    return get_personal_wagers_for_user(user_id, team_ids)
+
+
 def count_wagers_won_for_user(user_id, team_ids=None):
     """Count how many team wagers a user has completed as a participant."""
-    wagers = get_wagers_for_user(user_id, team_ids)
+    wagers = get_personal_wagers_for_user(user_id, team_ids)
     won_count = 0
 
     for wager in wagers:

@@ -1,20 +1,74 @@
-from datetime import datetime, timezone
-
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-
 from sqlalchemy import and_, or_
 
 from app import db
-from app.models import Activity, Notification, Subtask, Task, Team, TeamMember, is_team_leader, is_team_member
+from app.models import (
+    Activity,
+    Notification,
+    Subtask,
+    Task,
+    Team,
+    TeamMember,
+    is_team_leader,
+    is_team_member,
+)
+from app.time_utils import now_app_time, parse_date_as_app_time
 from app.wager_helpers import sync_wagers_for_task
 
 
 tasks_bp = Blueprint("tasks", __name__)
 
 
+def redirect_after_task_action(default_endpoint="tasks.task_list"):
+    """
+    Redirect back to the page where the task action was submitted from.
+
+    This keeps leaders on the My Teams member task page after editing tasks.
+    Only internal relative paths are allowed.
+    """
+    return_to = request.form.get("return_to", "").strip()
+
+    if return_to.startswith("/") and not return_to.startswith("//"):
+        return redirect(return_to)
+
+    return redirect(url_for(default_endpoint))
+
+
+def get_effective_task_owner_id(task):
+    """
+    Return the user who owns the task progress.
+
+    Rule:
+    - Assigned tasks belong to the assignee.
+    - Unassigned tasks belong to the creator.
+    """
+    return task.assigned_to_user_id or task.user_id
+
+
+def can_manage_task(task, user_id):
+    """
+    Return whether the user can edit or delete this task.
+
+    Task management is limited to the task creator.
+    Assigned members can view and complete tasks, but cannot edit task details.
+    """
+    return task.user_id == user_id
+
+
+def can_work_on_task(task, user_id):
+    """
+    Return whether the user can update task progress.
+
+    Progress includes direct completion and subtask changes.
+    For assigned tasks, only the assignee can update progress.
+    For unassigned tasks, only the creator can update progress.
+    """
+    return get_effective_task_owner_id(task) == user_id
+
+
 def validate_team_id(team_id_str):
-    """Validate team_id belongs to current user."""
+    """Validate that the selected team belongs to the current user."""
     if not team_id_str:
         return None, None
 
@@ -35,27 +89,44 @@ def validate_team_id(team_id_str):
 
 
 def validate_priority(priority):
+    """Return a safe priority value."""
     if priority not in ("low", "medium", "high"):
         return "medium"
 
     return priority
 
 
+def normalised_task_status(status):
+    """
+    Normalise old task statuses for the simplified task flow.
+
+    The app no longer uses in_progress as a separate workflow state.
+    Any non-done status is treated as todo.
+    """
+    if status == "done":
+        return "done"
+
+    return "todo"
+
+
 def format_status_label(status):
     """Return a user-friendly task status label."""
     labels = {
         "todo": "Todo",
-        "in_progress": "In Progress",
+        "in_progress": "Todo",
         "done": "Done",
     }
 
-    return labels.get(status, status)
+    return labels.get(status, "Todo")
 
 
 def create_task_status_activity(task, old_status, new_status):
     """Create an activity record when a team task status changes."""
     if task.team_id is None:
         return
+
+    old_status = normalised_task_status(old_status)
+    new_status = normalised_task_status(new_status)
 
     if old_status == new_status:
         return
@@ -67,7 +138,8 @@ def create_task_status_activity(task, old_status, new_status):
         action_type = "moved_task_status"
         message = (
             f"{current_user.username} moved {task.title} "
-            f"from {format_status_label(old_status)} to {format_status_label(new_status)}."
+            f"from {format_status_label(old_status)} "
+            f"to {format_status_label(new_status)}."
         )
 
     db.session.add(
@@ -85,29 +157,31 @@ def handle_task_status_change(task, old_status):
     """
     Handle side effects when task.status changes.
 
-    This is the correct place to sync related wagers.
+    This creates activity records and syncs linked wagers.
     GET pages should only read data and should not commit sync changes.
     """
-    if task.status == old_status:
+    old_status = normalised_task_status(old_status)
+    new_status = normalised_task_status(task.status)
+
+    if old_status == new_status:
         return
 
-    create_task_status_activity(task, old_status, task.status)
+    create_task_status_activity(task, old_status, new_status)
     sync_wagers_for_task(task)
 
 
 @tasks_bp.route("/todos")
 @login_required
 def task_list():
-    now = datetime.now(timezone.utc)
+    now = now_app_time()
 
     tasks = (
-        Task.query
-        .filter(
+        Task.query.filter(
             or_(
                 Task.assigned_to_user_id == current_user.id,
                 and_(
                     Task.user_id == current_user.id,
-                    Task.assigned_to_user_id == None,
+                    Task.assigned_to_user_id.is_(None),
                 ),
             )
         )
@@ -118,7 +192,7 @@ def task_list():
     overdue, due_today, upcoming, done = [], [], [], []
 
     for task in tasks:
-        if task.status == "done":
+        if normalised_task_status(task.status) == "done":
             done.append(task)
         elif task.due_date is None:
             upcoming.append(task)
@@ -133,14 +207,18 @@ def task_list():
     teams = [membership.team for membership in memberships]
     leader_team_ids = {m.team_id for m in memberships if m.role == "leader"}
 
-    # Build member lists for teams where current user is leader (for assignee dropdown)
+    # Build member lists for teams where the current user is leader.
+    # This is used by the task creation assignee dropdown.
     team_members_map = {}
-    for m in memberships:
-        if m.role == "leader":
-            members = TeamMember.query.filter_by(team_id=m.team_id).all()
-            team_members_map[str(m.team_id)] = [
-                {"id": tm.user_id, "username": tm.user.username}
-                for tm in members
+    for membership in memberships:
+        if membership.role == "leader":
+            members = TeamMember.query.filter_by(team_id=membership.team_id).all()
+            team_members_map[str(membership.team_id)] = [
+                {
+                    "id": team_member.user_id,
+                    "username": team_member.user.username,
+                }
+                for team_member in members
             ]
 
     return render_template(
@@ -159,9 +237,14 @@ def task_list():
 @tasks_bp.route("/tasks/create", methods=["POST"])
 @login_required
 def create_task():
-    is_leader = TeamMember.query.filter_by(
-        user_id=current_user.id, role="leader"
-    ).first() is not None
+    is_leader = (
+        TeamMember.query.filter_by(
+            user_id=current_user.id,
+            role="leader",
+        ).first()
+        is not None
+    )
+
     if not is_leader:
         flash("Only team leaders can create tasks.", "error")
         return redirect(url_for("tasks.task_list"))
@@ -187,39 +270,39 @@ def create_task():
     due_date = None
     if due_date_str:
         try:
-            due_date = datetime.strptime(
-                due_date_str,
-                "%Y-%m-%d",
-            ).replace(tzinfo=timezone.utc)
+            due_date = parse_date_as_app_time(due_date_str)
         except ValueError:
             flash("Invalid date format.", "error")
             return redirect(url_for("tasks.task_list"))
 
-    # Validate team permissions and resolve assignee
+    team = Team.query.get(team_id)
+    if team is None:
+        flash("Selected team not found.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_member(team_id, current_user.id):
+        flash("Not authorized to assign tasks to this team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
+    if not is_team_leader(team_id, current_user.id):
+        flash("Only team leaders can assign tasks to a team.", "error")
+        return redirect(url_for("tasks.task_list"))
+
     assigned_to_user_id = None
-    if team_id:
-        team = Team.query.get(team_id)
-        if team is None:
-            flash("Selected team not found.", "error")
-            return redirect(url_for("tasks.task_list"))
-        if not is_team_member(team_id, current_user.id):
-            flash("Not authorized to assign tasks to this team.", "error")
-            return redirect(url_for("tasks.task_list"))
-        if not is_team_leader(team_id, current_user.id):
-            flash("Only team leaders can assign tasks to a team.", "error")
+    assignee_id_str = request.form.get("assigned_to_user_id", "").strip()
+
+    if assignee_id_str:
+        try:
+            assignee_id = int(assignee_id_str)
+        except ValueError:
+            flash("Invalid assignee.", "error")
             return redirect(url_for("tasks.task_list"))
 
-        assignee_id_str = request.form.get("assigned_to_user_id", "").strip()
-        if assignee_id_str:
-            try:
-                assignee_id = int(assignee_id_str)
-            except ValueError:
-                flash("Invalid assignee.", "error")
-                return redirect(url_for("tasks.task_list"))
-            if not is_team_member(team_id, assignee_id):
-                flash("Assignee is not a member of this team.", "error")
-                return redirect(url_for("tasks.task_list"))
-            assigned_to_user_id = assignee_id
+        if not is_team_member(team_id, assignee_id):
+            flash("Assignee is not a member of this team.", "error")
+            return redirect(url_for("tasks.task_list"))
+
+        assigned_to_user_id = assignee_id
 
     task = Task(
         title=title,
@@ -234,13 +317,17 @@ def create_task():
     db.session.add(task)
 
     if assigned_to_user_id and assigned_to_user_id != current_user.id:
-        team = Team.query.get(team_id)
-        db.session.add(Notification(
-            user_id=assigned_to_user_id,
-            type="task_assigned",
-            message=f"{current_user.username} assigned you a new task: \"{title}\" in {team.name}.",
-            link=url_for("tasks.task_list"),
-        ))
+        db.session.add(
+            Notification(
+                user_id=assigned_to_user_id,
+                type="task_assigned",
+                message=(
+                    f'{current_user.username} assigned you a new task: '
+                    f'"{title}" in {team.name}.'
+                ),
+                link=url_for("tasks.task_list"),
+            )
+        )
 
     db.session.commit()
 
@@ -253,78 +340,75 @@ def create_task():
 def edit_task(task_id):
     task = Task.query.get_or_404(task_id)
 
-    if task.user_id != current_user.id:
+    if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     title = request.form.get("title", "").strip()
     if not title:
         flash("Task title is required.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     team_id, err = validate_team_id(request.form.get("team_id"))
     if err:
         flash(err, "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     if not team_id:
         flash("Tasks must be assigned to a team.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     if not is_team_leader(team_id, current_user.id):
         flash("Only team leaders can assign tasks to a team.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
     task.title = title
     task.description = request.form.get("description", "").strip() or None
     task.team_id = team_id
-    if task.user_id == current_user.id:
-        task.priority = validate_priority(request.form.get("priority", "medium"))
-
-    new_status = request.form.get("status")
-    if new_status in ("todo", "in_progress", "done"):
-        task.status = new_status
+    task.priority = validate_priority(request.form.get("priority", "medium"))
 
     due_date_str = request.form.get("due_date", "").strip()
     if due_date_str:
         try:
-            task.due_date = datetime.strptime(
-                due_date_str,
-                "%Y-%m-%d",
-            ).replace(tzinfo=timezone.utc)
+            task.due_date = parse_date_as_app_time(due_date_str)
         except ValueError:
             flash("Invalid date format.", "error")
-            return redirect(url_for("tasks.task_list"))
+            return redirect_after_task_action()
     else:
         task.due_date = None
 
+    # Status is intentionally not updated from the edit form.
+    # Task completion should happen through the dedicated complete action or subtasks.
     handle_task_status_change(task, old_status)
 
     db.session.commit()
 
     flash("Task updated!", "success")
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/status", methods=["POST"])
 @login_required
 def update_status(task_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
     new_status = request.form.get("status")
 
-    if new_status in ("todo", "in_progress", "done"):
-        task.status = new_status
+    # Direct status updates are only used for completing a task.
+    # Editing task details must not change status.
+    if new_status == "done":
+        task.status = "done"
         handle_task_status_change(task, old_status)
         db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/delete", methods=["POST"])
@@ -332,18 +416,25 @@ def update_status(task_id):
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
 
-    if task.user_id != current_user.id:
+    if not can_manage_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     db.session.delete(task)
     db.session.commit()
 
     flash("Task deleted.", "success")
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 def _sync_task_status(task):
+    """
+    Sync parent task status based on subtask completion.
+
+    The app no longer uses a separate in_progress task state:
+    - if all subtasks are done, the task becomes done
+    - otherwise, the task remains todo
+    """
     subtasks = task.subtasks
 
     if not subtasks:
@@ -352,25 +443,24 @@ def _sync_task_status(task):
 
     done_count = sum(1 for subtask in subtasks if subtask.is_done)
 
-    if done_count == 0:
-        task.status = "todo"
-    elif done_count == len(subtasks):
+    if done_count == len(subtasks):
         task.status = "done"
     else:
-        task.status = "in_progress"
+        task.status = "todo"
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks", methods=["POST"])
 @login_required
 def add_subtask(task_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     title = request.form.get("title", "").strip()
     if not title:
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -382,22 +472,23 @@ def add_subtask(task_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/toggle", methods=["POST"])
 @login_required
 def toggle_subtask(task_id, subtask_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     subtask = Subtask.query.get_or_404(subtask_id)
 
     if subtask.task_id != task_id:
         flash("Not found.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -407,22 +498,23 @@ def toggle_subtask(task_id, subtask_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()
 
 
 @tasks_bp.route("/tasks/<int:task_id>/subtasks/<int:subtask_id>/delete", methods=["POST"])
 @login_required
 def delete_subtask(task_id, subtask_id):
     task = Task.query.get_or_404(task_id)
-    if task.user_id != current_user.id and task.assigned_to_user_id != current_user.id:
+
+    if not can_work_on_task(task, current_user.id):
         flash("Not authorized.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     subtask = Subtask.query.get_or_404(subtask_id)
 
     if subtask.task_id != task_id:
         flash("Not found.", "error")
-        return redirect(url_for("tasks.task_list"))
+        return redirect_after_task_action()
 
     old_status = task.status
 
@@ -434,4 +526,4 @@ def delete_subtask(task_id, subtask_id):
 
     db.session.commit()
 
-    return redirect(url_for("tasks.task_list"))
+    return redirect_after_task_action()

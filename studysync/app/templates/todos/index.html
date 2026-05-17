@@ -20,8 +20,6 @@
         <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
           data-filter="todo">Todo</button>
         <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
-          data-filter="in_progress">In Progress</button>
-        <button class="px-4 py-2 rounded-full font-semibold text-sm transition filter-tab text-gray-700 hover:bg-gray-100"
           data-filter="done">Done</button>
       </div>
       <!-- Team Filter -->
@@ -124,12 +122,14 @@
     } %}
     {% set status_dot = {
       'todo': 'bg-red-500',
-      'in_progress': 'bg-yellow-500',
       'done': 'bg-green-500'
     } %}
+    {% set is_assigned_member = task.assigned_to_user_id == current_user.id and task.user_id != current_user.id %}
+    {% set can_manage_task = task.user_id == current_user.id %}
+    {% set display_status = 'done' if task.status == 'done' else 'todo' %}
 
     <div class="bg-white border-l-4 {{ border_color }} rounded-lg p-4 hover:shadow-md transition-shadow task-card"
-      data-status="{{ task.status }}"
+      data-status="{{ display_status }}"
       data-title="{{ task.title | lower }}"
       data-team-id="{{ task.team_id or 'personal' }}"
       data-assigned-to-me="{{ 'true' if task.assigned_to_user_id == current_user.id else 'false' }}">
@@ -137,7 +137,7 @@
 
         <!-- Status dot -->
         <div class="flex items-center pt-1">
-          <div class="w-3 h-3 rounded-full {{ status_dot.get(task.status, 'bg-gray-400') }}"></div>
+          <div class="w-3 h-3 rounded-full {{ status_dot.get(display_status, 'bg-gray-400') }}"></div>
         </div>
 
         <!-- Main content -->
@@ -214,26 +214,25 @@
               {{ task.team.name }}
             </span>
             {% endif %}
-            <!-- Status badge -->
-            {% if task.status == 'in_progress' %}
-            <span class="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-semibold">In Progress</span>
-            {% endif %}
           </div>
         </div>
 
         <!-- Actions -->
         <div class="flex items-center gap-2 pt-1">
           <button class="text-gray-400 hover:text-indigo-600 px-2 edit-btn"
+            title="{{ 'View task details' if is_assigned_member else 'Edit task' }}"
             data-task-id="{{ task.id }}"
             data-title="{{ task.title }}"
             data-description="{{ task.description or '' }}"
             data-priority="{{ task.priority }}"
-            data-status="{{ task.status }}"
             data-due-date="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}"
             data-team-id="{{ task.team_id or '' }}"
-            data-is-assignee="{{ '1' if task.assigned_to_user_id == current_user.id and task.user_id != current_user.id else '0' }}">
-            <i class="fas fa-pencil text-sm"></i>
+            data-team-name="{{ task.team.name if task.team else 'No Team' }}"
+            data-read-only="{{ '1' if is_assigned_member else '0' }}">
+            <i class="fas {{ 'fa-eye' if is_assigned_member else 'fa-pencil' }} text-sm"></i>
           </button>
+
+          {% if can_manage_task %}
           <form method="POST" action="{{ url_for('tasks.delete_task', task_id=task.id) }}"
             onsubmit="return confirm('Delete this task?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -241,6 +240,7 @@
               <i class="fas fa-trash text-sm"></i>
             </button>
           </form>
+          {% endif %}
         </div>
 
       </div>
@@ -314,7 +314,7 @@
 <!-- Edit Task Modal -->
 <div id="editModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-    <h3 class="text-lg font-bold text-gray-900 mb-4">Edit Task</h3>
+    <h3 id="editModalTitle" class="text-lg font-bold text-gray-900 mb-4">Edit Task</h3>
     <form method="POST" id="editForm" class="space-y-4">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div>
@@ -349,17 +349,8 @@
           <input type="hidden" id="editPriorityHidden" name="priority" disabled>
         </div>
       </div>
-      <div id="editStatusField">
-        <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
-        <select name="status" id="editStatus"
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-          <option value="todo">Todo</option>
-          <option value="in_progress">In Progress</option>
-          <option value="done">Done</option>
-        </select>
-      </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
+        <label id="editTeamLabel" class="block text-sm font-medium text-gray-700 mb-2">Assign to Team</label>
         <select name="team_id" id="editTeamId"
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
           {% for team in teams %}
@@ -368,9 +359,11 @@
             {% endif %}
           {% endfor %}
         </select>
+        <input type="text" id="editTeamDisplay" readonly
+          class="hidden w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed">
       </div>
       <div class="flex gap-2 pt-2">
-        <button type="submit"
+        <button type="submit" id="editSubmitBtn"
           class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition">
           Save Changes
         </button>
@@ -503,39 +496,84 @@
     applyFilters();
   });
 
-  // Edit modal
+  // Edit / view task modal.
+  // Task creators can edit task details. Status is changed only through completion/subtasks.
+  // Assigned members get a read-only detail view.
   const editModal = document.getElementById('editModal');
   const editForm = document.getElementById('editForm');
 
+  const editModalTitle = document.getElementById('editModalTitle');
+  const editTitle = document.getElementById('editTitle');
+  const editDescription = document.getElementById('editDescription');
+  const editDueDate = document.getElementById('editDueDate');
   const editPriority = document.getElementById('editPriority');
   const editPriorityHidden = document.getElementById('editPriorityHidden');
   const priorityLockedNote = document.getElementById('priorityLockedNote');
+  const editTeamLabel = document.getElementById('editTeamLabel');
+  const editTeamId = document.getElementById('editTeamId');
+  const editTeamDisplay = document.getElementById('editTeamDisplay');
+  const editSubmitBtn = document.getElementById('editSubmitBtn');
+  const closeEditModal = document.getElementById('closeEditModal');
+
+  function setReadOnlyClasses(field, isReadOnly) {
+    field.classList.toggle('bg-gray-50', isReadOnly);
+    field.classList.toggle('text-gray-700', isReadOnly);
+    field.classList.toggle('cursor-not-allowed', isReadOnly);
+  }
+
+  function setModalReadOnly(isReadOnly) {
+    editModalTitle.textContent = isReadOnly ? 'View Task Detail' : 'Edit Task';
+
+    editTitle.readOnly = isReadOnly;
+    editDescription.readOnly = isReadOnly;
+    editDueDate.disabled = isReadOnly;
+    editPriority.disabled = isReadOnly;
+    // In read-only mode, show that priority is controlled by the team leader.
+    priorityLockedNote.classList.toggle('hidden', !isReadOnly);
+
+    editTeamLabel.textContent = isReadOnly ? 'Assigned Team' : 'Assign to Team';
+    editTeamId.classList.toggle('hidden', isReadOnly);
+    editTeamId.disabled = isReadOnly;
+    editTeamDisplay.classList.toggle('hidden', !isReadOnly);
+
+    editSubmitBtn.classList.toggle('hidden', isReadOnly);
+    closeEditModal.textContent = isReadOnly ? 'Close' : 'Cancel';
+
+    [editTitle, editDescription, editDueDate, editPriority, editTeamId].forEach(field => {
+      setReadOnlyClasses(field, isReadOnly);
+    });
+  }
 
   document.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', function () {
       const id = this.dataset.taskId;
-      editForm.action = `/tasks/${id}/edit`;
-      document.getElementById('editTitle').value = this.dataset.title;
-      document.getElementById('editDescription').value = this.dataset.description;
+      const isReadOnly = this.dataset.readOnly === '1';
+
+      editForm.action = isReadOnly ? '#' : `/tasks/${id}/edit`;
+      editTitle.value = this.dataset.title;
+      editDescription.value = this.dataset.description;
       editDueDatePicker.setDate(this.dataset.dueDate || null);
       editPriority.value = this.dataset.priority;
-      document.getElementById('editStatus').value = this.dataset.status;
-      document.getElementById('editTeamId').value = this.dataset.teamId;
+      editTeamId.value = this.dataset.teamId;
+      editTeamDisplay.value = this.dataset.teamName || 'No Team';
 
-      const isAssignee = this.dataset.isAssignee === '1';
-      document.getElementById('editStatusField').classList.toggle('hidden', isAssignee);
-      editPriority.disabled = isAssignee;
-      editPriority.classList.toggle('opacity-50', isAssignee);
-      editPriority.classList.toggle('cursor-not-allowed', isAssignee);
-      editPriorityHidden.disabled = !isAssignee;
+      // The hidden priority input was only needed for the old partial-lock edit mode.
+      // In read-only view, the form cannot submit; in edit mode, the select is enabled.
+      editPriorityHidden.disabled = true;
       editPriorityHidden.value = this.dataset.priority;
-      priorityLockedNote.classList.toggle('hidden', !isAssignee);
 
+      setModalReadOnly(isReadOnly);
       editModal.classList.remove('hidden');
     });
   });
 
-  document.getElementById('closeEditModal').addEventListener('click', () => {
+  editForm.addEventListener('submit', function (event) {
+    if (editSubmitBtn.classList.contains('hidden')) {
+      event.preventDefault();
+    }
+  });
+
+  closeEditModal.addEventListener('click', () => {
     editModal.classList.add('hidden');
   });
 

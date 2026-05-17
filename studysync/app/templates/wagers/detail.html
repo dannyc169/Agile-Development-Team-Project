@@ -3,9 +3,13 @@
 {% block title %}Wagers - UWA StudySync{% endblock %}
 {% block page_title %}Wagers{% endblock %}
 
+{#
+  Render one wager card.
+  Participant status is intentionally not rendered inside each wager card.
+  The page-level participant overview is rendered once near the top of the page.
+#}
 {% macro render_wager_card(item) %}
 {% set wager = item.wager %}
-{% set participants = item.participants %}
 {% set user_status = item.user_status %}
 
 <section class="space-y-6">
@@ -54,23 +58,18 @@
             {% endif %}
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4">
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Points Earned</p>
-                <p class="text-4xl font-bold">
-                    ⭐ {{ wager.points_earned|default(wager.prize_pool) }} / {{ wager.total_possible_points|default(wager.prize_pool) }} pts
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+          <div>
+                <p class="text-sm text-indigo-100">Points Earned</p>
+                <p class="text-4xl font-bold mt-2">
+                    ⭐ {{ wager.points_earned }} / {{ wager.total_possible_points }} pts
                 </p>
             </div>
-
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Time Remaining</p>
-                <p class="text-4xl font-bold">⏰ {{ wager.time_remaining }}</p>
-            </div>
-
-            <div>
-                <p class="text-sm text-indigo-100 mb-2">Participants On Track</p>
-                <p class="text-4xl font-bold">
-                    {{ wager.participants_on_track }}/{{ wager.total_participants }}
+        
+            <div class="md:text-right">
+                <p class="text-sm text-indigo-100">Time Remaining</p>
+                <p class="text-4xl font-bold mt-2">
+                    ⏰ {{ wager.time_remaining }}
                 </p>
             </div>
         </div>
@@ -120,7 +119,9 @@
                             Each completed linked task gives
                             <span class="font-bold">{{ wager.points_per_task|default(10) }} points</span>.
                             This wager can earn up to
-                            <span class="font-bold">{{ wager.total_possible_points|default(wager.prize_pool) }} points</span>.
+                            <span class="font-bold">
+                                {{ wager.total_possible_points|default(wager.prize_pool) }} points
+                            </span>.
                         </div>
                     </div>
 
@@ -148,71 +149,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="bg-white rounded-2xl shadow p-8">
-                <h3 class="text-3xl font-bold text-gray-900 mb-8">👥 Participant Status</h3>
-
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-left">
-                        <thead>
-                            <tr class="border-b border-gray-200">
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Participant</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Tasks Done</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Progress</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Status</th>
-                                <th class="pb-4 text-lg font-semibold text-gray-900">Points</th>
-                            </tr>
-                        </thead>
-
-                        <tbody class="divide-y divide-gray-100">
-                            {% for participant in participants %}
-                            <tr class="{{ participant.row_class }}">
-                                <td class="py-5">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-full text-white flex items-center justify-center font-bold {{ participant.avatar_color }}">
-                                            {{ participant.avatar }}
-                                        </div>
-
-                                        <div>
-                                            <span class="text-lg {{ participant.name_class }}">
-                                                {{ participant.name }}
-                                            </span>
-
-                                            {% if participant.badge %}
-                                            <p class="text-xs text-gray-500 mt-1">
-                                                🏅 {{ participant.badge.name }}
-                                            </p>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <td class="py-5 text-lg {{ participant.done_class }}">
-                                    {{ participant.tasks_done }}/{{ participant.tasks_total }}
-                                </td>
-
-                                <td class="py-5">
-                                    <div class="w-28 h-3 bg-gray-200 rounded-full overflow-hidden">
-                                        <div class="h-full rounded-full {{ participant.progress_class }}"
-                                             style="width: {{ participant.progress }}%;"></div>
-                                    </div>
-                                </td>
-
-                                <td class="py-5">
-                                    <span class="px-3 py-1 rounded-lg text-sm font-semibold {{ participant.status_class }}">
-                                        {{ participant.status }}
-                                    </span>
-                                </td>
-
-                                <td class="py-5 text-lg font-semibold text-indigo-600">
-                                    {{ participant.points|default(participant.reward) }} pts
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
 
         <div>
@@ -222,7 +158,12 @@
                 <div class="flex justify-center mb-8">
                     <div class="relative w-36 h-36">
                         <svg class="w-36 h-36 transform -rotate-90">
-                            <circle cx="72" cy="72" r="56" stroke="#E5E7EB" stroke-width="10" fill="none"></circle>
+                            <circle cx="72"
+                                    cy="72"
+                                    r="56"
+                                    stroke="#E5E7EB"
+                                    stroke-width="10"
+                                    fill="none"></circle>
 
                             {% set percent = 0 %}
                             {% if user_status.tasks_total > 0 %}
@@ -303,7 +244,7 @@
                             </label>
                             {% endfor %}
                         {% else %}
-                            <p class="text-sm text-gray-500">No linked tasks.</p>
+                            <p class="text-sm text-gray-500">No linked tasks assigned to you.</p>
                         {% endif %}
                     </div>
                 </div>
@@ -313,21 +254,167 @@
 </section>
 {% endmacro %}
 
+{#
+  Render one page-level participant overview.
+  This table uses aggregated personal task data prepared in __init__.py.
+  It should appear once near the top of the Wagers page.
+#}
+{% macro render_participant_status_overview(participants) %}
+<section class="bg-white rounded-2xl shadow p-8">
+    <h2 class="text-3xl font-bold text-gray-900 mb-8">👥 Participant Status Overview</h2>
+
+    {% if participants %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-left">
+            <thead>
+                <tr class="border-b border-gray-200">
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Participant</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Tasks Done</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Progress</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Status</th>
+                    <th class="pb-4 text-lg font-semibold text-gray-900">Points</th>
+                </tr>
+            </thead>
+
+            <tbody class="divide-y divide-gray-100">
+                {% for participant in participants %}
+                <tr class="{{ participant.row_class }}">
+                    <td class="py-5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full text-white flex items-center justify-center font-bold {{ participant.avatar_color }}">
+                                {{ participant.avatar }}
+                            </div>
+
+                            <div>
+                                <span class="text-lg {{ participant.name_class }}">
+                                    {{ participant.name }}
+                                </span>
+
+                                {% if participant.badge %}
+                                <p class="text-xs text-gray-500 mt-1">
+                                    🏅 {{ participant.badge.name }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+
+                    <td class="py-5 text-lg {{ participant.done_class }}">
+                        {{ participant.tasks_done }}/{{ participant.tasks_total }}
+                    </td>
+
+                    <td class="py-5">
+                        <div class="w-28 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full {{ participant.progress_class }}"
+                                 style="width: {{ participant.progress }}%;"></div>
+                        </div>
+                    </td>
+
+                    <td class="py-5">
+                        <span class="px-3 py-1 rounded-lg text-sm font-semibold {{ participant.status_class }}">
+                            {{ participant.status }}
+                        </span>
+                    </td>
+
+                    <td class="py-5 text-lg font-semibold text-indigo-600">
+                        {{ participant.points }} pts
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500">No participant data available.</p>
+    {% endif %}
+</section>
+{% endmacro %}
+
 {% block content %}
 <div class="space-y-10">
-    <div class="flex items-center justify-between">
+    {#
+      Page toolbar:
+      - Leaders can switch between Personal and Team Members views.
+      - Everyone can filter the current view by team.
+      - The available teams are prepared by the route based on the current scope.
+    #}
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
             <h1 class="text-3xl font-bold text-gray-900">Wagers</h1>
             <p class="text-gray-500 mt-1">
-                Track team wager progress and earn points from completed linked tasks.
+                Track personal wager progress and earn points from your own linked tasks.
             </p>
         </div>
 
-        <a href="{{ url_for('create_wager') }}"
-           class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
-            + Create Wager
-        </a>
+        <div class="flex flex-wrap items-center gap-3">
+            {% set current_scope = scope|default('personal') %}
+            {% set current_team_id = selected_team_id|default(none) %}
+            {% set current_team_filter = current_team_id if current_team_id else 'all' %}
+
+            {% if can_view_team_wagers|default(false) %}
+            <div class="flex items-center gap-2 rounded-xl bg-white border border-gray-200 p-1 shadow-sm">
+                <a href="{{ url_for('wagers_detail', scope='personal', team_id=current_team_filter) }}"
+                   class="px-4 py-2 rounded-lg text-sm font-semibold transition
+                          {{ 'bg-indigo-600 text-white shadow-sm' if current_scope == 'personal' else 'text-gray-600 hover:bg-gray-50' }}">
+                    Personal
+                </a>
+
+                <a href="{{ url_for('wagers_detail', scope='team', team_id=current_team_filter) }}"
+                   class="px-4 py-2 rounded-lg text-sm font-semibold transition
+                          {{ 'bg-indigo-600 text-white shadow-sm' if current_scope == 'team' else 'text-gray-600 hover:bg-gray-50' }}">
+                    Team Members
+                </a>
+            </div>
+            {% endif %}
+
+            {# Team filter for the current Wager view. #}
+            <form method="GET"
+                  action="{{ url_for('wagers_detail') }}"
+                  class="flex items-center gap-2">
+                <input type="hidden" name="scope" value="{{ current_scope }}">
+
+                <label for="teamFilter" class="text-sm font-semibold text-gray-600">
+                    Team
+                </label>
+
+                <select id="teamFilter"
+                        name="team_id"
+                        onchange="this.form.submit()"
+                        class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500">
+                    <option value="all" {{ 'selected' if not current_team_id else '' }}>
+                        All Teams
+                    </option>
+
+                    {% for team in team_filter_teams|default([]) %}
+                    <option value="{{ team.id }}" {{ 'selected' if current_team_id == team.id else '' }}>
+                        {{ team.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+
+            <a href="{{ url_for('create_wager') }}"
+               class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
+                + Create Wager
+            </a>
+        </div>
     </div>
+
+    {% if can_view_team_wagers|default(false) %}
+    <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4 text-sm text-indigo-700">
+        {% if scope|default('personal') == 'team' %}
+            You are viewing all wagers from teams you lead.
+        {% else %}
+            You are viewing your personal wagers only.
+        {% endif %}
+
+        {% if selected_team_id|default(none) %}
+            <span class="ml-1">The list is filtered by the selected team.</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {{ render_participant_status_overview(participant_overview|default([])) }}
 
     <div class="space-y-10">
         <section class="space-y-6">
