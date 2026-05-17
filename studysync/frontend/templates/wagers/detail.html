@@ -16,7 +16,7 @@
     <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl shadow-lg p-8 text-white">
         <div class="flex items-start justify-between mb-6">
             <div>
-                <h2 class="text-5xl font-bold mb-3">{{ wager.title }}</h2>
+                <h2 class="text-3xl md:text-4xl font-bold mb-3">{{ wager.title }}</h2>
 
                 <div class="flex flex-wrap items-center gap-4 text-lg">
                     <span class="inline-flex items-center gap-2 font-semibold">
@@ -379,7 +379,7 @@
 
                 <select id="teamFilter"
                         name="team_id"
-                        onchange="this.form.submit()"
+                        data-submit-on-change="true"
                         class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500">
                     {% if not team_filter_teams|default([]) %}
                     <option value="" selected disabled>
