@@ -266,6 +266,9 @@ class WagerParticipant(db.Model):
 
 class WagerTask(db.Model):
     __tablename__ = "wager_tasks"
+    __table_args__ = (
+        db.UniqueConstraint("task_id", name="uq_wager_tasks_task_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)
