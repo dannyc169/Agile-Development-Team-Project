@@ -209,7 +209,7 @@ class Notification(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # "comment" | "task_assigned"
+    type = db.Column(db.String(50), nullable=False)  # "comment" | "task_assigned" | "nudge"
     message = db.Column(db.String(255), nullable=False)
     link = db.Column(db.String(255), nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
@@ -266,6 +266,9 @@ class WagerParticipant(db.Model):
 
 class WagerTask(db.Model):
     __tablename__ = "wager_tasks"
+    __table_args__ = (
+        db.UniqueConstraint("task_id", name="uq_wager_tasks_task_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     wager_id = db.Column(db.Integer, db.ForeignKey("wagers.id"), nullable=False)

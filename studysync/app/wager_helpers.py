@@ -160,27 +160,49 @@ def count_completed_linked_tasks_for_user(user_id, team_ids=None):
     Count completed linked tasks that belong to a user.
 
     This is used for leaderboard and personal points.
-    It counts assigned tasks for the assignee, and unassigned tasks for the creator.
-    """
-    query = (
-        db.session.query(Task.id)
-        .join(WagerTask, WagerTask.task_id == Task.id)
-        .join(Wager, Wager.id == WagerTask.wager_id)
-        .join(WagerParticipant, WagerParticipant.wager_id == Wager.id)
-        .filter(
-            WagerParticipant.user_id == user_id,
-            Task.status == "done",
-            _task_user_filter(user_id),
-        )
-    )
 
+    It intentionally uses resolve_linked_task() instead of a pure SQL join so
+    old wager task links that only stored task_name are counted consistently
+    with the Wager page.
+    """
     if team_ids is not None:
         if not team_ids:
             return 0
 
-        query = query.filter(Wager.team_id.in_(team_ids))
+        team_ids = set(team_ids)
 
-    return query.distinct().count()
+    wager_query = (
+        Wager.query.join(
+            WagerParticipant,
+            WagerParticipant.wager_id == Wager.id,
+        )
+        .filter(WagerParticipant.user_id == user_id)
+    )
+
+    if team_ids is not None:
+        wager_query = wager_query.filter(Wager.team_id.in_(team_ids))
+
+    completed_task_ids = set()
+
+    for wager in wager_query.all():
+        for link in wager.linked_tasks:
+            linked_task = resolve_linked_task(link, wager)
+
+            if linked_task is None:
+                continue
+
+            if team_ids is not None and linked_task.team_id not in team_ids:
+                continue
+
+            if linked_task.status != "done":
+                continue
+
+            if not user_owns_or_is_assigned_task(linked_task, user_id):
+                continue
+
+            completed_task_ids.add(linked_task.id)
+
+    return len(completed_task_ids)
 
 
 def calculate_participant_status(tasks_done, tasks_total, end_date_value):

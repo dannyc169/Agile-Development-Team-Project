@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_login import (
@@ -110,6 +110,13 @@ def create_app(test_config=None):
             return ""
 
         return value.strftime("%Y-%m-%d")
+
+    def parse_wager_date(date_str):
+        """Parse a wager date and require the exact YYYY-MM-DD format."""
+        if len(date_str) != 10:
+            raise ValueError("Date must use YYYY-MM-DD format.")
+
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
 
     def avatar_color_for_index(index):
         colors = [
@@ -602,6 +609,138 @@ def create_app(test_config=None):
         progress_rows.sort(key=lambda row: row["team_name"].lower())
         return progress_rows
 
+    def build_dashboard_focus_tasks(all_tasks, today, limit=5):
+        """Build a small priority queue for the dashboard.
+
+        The dashboard should highlight what needs attention now, while the
+        full My Tasks page remains responsible for complete task management.
+        """
+        priority_rank = {"high": 0, "medium": 1, "low": 2}
+        focus_rows = []
+        seen_task_ids = set()
+        upcoming_cutoff = today + timedelta(days=7)
+
+        def task_due_date(task):
+            return task.due_date.date() if task.due_date else None
+
+        def task_sort_key(task):
+            due = task_due_date(task)
+            return (
+                due or datetime.max.date(),
+                priority_rank.get(task.priority, 3),
+                task.title.lower(),
+            )
+
+        def has_active_wager(task):
+            for link in getattr(task, "wager_links", []):
+                wager = getattr(link, "wager", None)
+
+                if wager is not None and wager.status == "active":
+                    return True
+
+            return False
+
+        def add_focus_task(task, category, label, badge_class, icon):
+            if len(focus_rows) >= limit:
+                return
+
+            if task.id in seen_task_ids or task.status == "done":
+                return
+
+            due = task_due_date(task)
+
+            if due is None:
+                due_label = "No due date"
+            elif due < today:
+                days_overdue = (today - due).days
+                due_label = f"{days_overdue}d overdue"
+            elif due == today:
+                due_label = "Due today"
+            else:
+                days_left = (due - today).days
+                due_label = f"Due in {days_left}d"
+
+            focus_rows.append(
+                {
+                    "task": task,
+                    "category": category,
+                    "label": label,
+                    "badge_class": badge_class,
+                    "icon": icon,
+                    "due_label": due_label,
+                }
+            )
+            seen_task_ids.add(task.id)
+
+        active_tasks = [task for task in all_tasks if task.status != "done"]
+
+        overdue_tasks = sorted(
+            [
+                task for task in active_tasks
+                if task_due_date(task) is not None and task_due_date(task) < today
+            ],
+            key=task_sort_key,
+        )
+        due_today_tasks = sorted(
+            [
+                task for task in active_tasks
+                if task_due_date(task) == today
+            ],
+            key=task_sort_key,
+        )
+        upcoming_tasks = sorted(
+            [
+                task for task in active_tasks
+                if (
+                    task_due_date(task) is not None
+                    and today < task_due_date(task) <= upcoming_cutoff
+                )
+            ],
+            key=task_sort_key,
+        )
+        wager_tasks = sorted(
+            [task for task in active_tasks if has_active_wager(task)],
+            key=task_sort_key,
+        )
+
+        for task in overdue_tasks:
+            add_focus_task(
+                task,
+                "overdue",
+                "Overdue",
+                "bg-red-100 text-red-700",
+                "fa-triangle-exclamation",
+            )
+
+        for task in due_today_tasks:
+            add_focus_task(
+                task,
+                "due_today",
+                "Due Today",
+                "bg-orange-100 text-orange-700",
+                "fa-calendar-day",
+            )
+
+        for task in upcoming_tasks:
+            add_focus_task(
+                task,
+                "upcoming",
+                "Next 7 Days",
+                "bg-blue-100 text-blue-700",
+                "fa-calendar-week",
+            )
+
+        for task in wager_tasks:
+            add_focus_task(
+                task,
+                "wager",
+                "Active Wager",
+                "bg-purple-100 text-purple-700",
+                "fa-trophy",
+            )
+
+        return focus_rows
+
     def build_dashboard_recent_activities(user_id, limit=5):
         """Build recent activity rows from teams the user belongs to."""
         memberships = TeamMember.query.filter_by(user_id=user_id).all()
@@ -681,6 +820,7 @@ def create_app(test_config=None):
             task for task in todays_tasks
             if task.status == "done"
         ]
+        focus_tasks = build_dashboard_focus_tasks(all_tasks, today)
 
         memberships = TeamMember.query.filter_by(user_id=current_user.id).all()
         teams = [membership.team for membership in memberships]
@@ -695,6 +835,7 @@ def create_app(test_config=None):
         return render_template(
             "dashboard/index.html",
             todays_tasks=todays_tasks,
+            focus_tasks=focus_tasks,
             todays_done_count=len(todays_done),
             todays_total_count=len(todays_tasks),
             teams=teams,
@@ -721,7 +862,7 @@ def create_app(test_config=None):
         - Team Members scope: filter by teams the current user leads.
         """
         requested_scope = request.args.get("scope", "personal")
-        selected_team_raw = request.args.get("team_id", "all")
+        selected_team_raw = request.args.get("team_id")
     
         can_view_team_wagers = user_can_view_team_wagers(current_user.id)
     
@@ -750,21 +891,28 @@ def create_app(test_config=None):
     
         allowed_team_ids = {team.id for team in team_filter_teams}
         selected_team_id = None
-    
-        if selected_team_raw and selected_team_raw != "all":
+
+        if selected_team_raw:
             try:
                 candidate_team_id = int(selected_team_raw)
-    
+
                 if candidate_team_id in allowed_team_ids:
                     selected_team_id = candidate_team_id
             except ValueError:
                 selected_team_id = None
-    
+
+        # Wagers must always be viewed within one team to avoid mixing data
+        # from different teams on the same page.
+        if selected_team_id is None and team_filter_teams:
+            selected_team_id = team_filter_teams[0].id
+
         if selected_team_id is not None:
             wagers = [
                 wager for wager in wagers
                 if wager.team_id == selected_team_id
             ]
+        else:
+            wagers = []
     
         sections = {
             "active": [],
@@ -772,7 +920,7 @@ def create_app(test_config=None):
             "failed": [],
         }
         
-        overview_team_ids = list(allowed_team_ids)
+        overview_team_ids = []
 
         if selected_team_id is not None:
             overview_team_ids = [selected_team_id]
@@ -829,12 +977,17 @@ def create_app(test_config=None):
 
         team_ids = [team.id for team in teams]
 
+        used_task_ids_query = db.session.query(WagerTask.task_id).filter(
+            WagerTask.task_id.isnot(None)
+        )
+
         task_options = []
         if team_ids:
             task_options = (
                 Task.query.filter(
                     Task.team_id.in_(team_ids),
                     Task.status != "done",
+                    ~Task.id.in_(used_task_ids_query),
                 )
                 .order_by(Task.created_at.asc())
                 .all()
@@ -876,8 +1029,8 @@ def create_app(test_config=None):
 
             if not error:
                 try:
-                    start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                    start_date = parse_wager_date(start_date_raw)
+                    end_date = parse_wager_date(end_date_raw)
 
                     if end_date < start_date:
                         error = "End Date cannot be earlier than Start Date."
@@ -899,8 +1052,14 @@ def create_app(test_config=None):
                         Task.query.filter(Task.id.in_(selected_task_ids_int)).all()
                     )
 
+                    already_linked_task = WagerTask.query.filter(
+                        WagerTask.task_id.in_(selected_task_ids_int)
+                    ).first()
+
                     if len(selected_tasks) != len(selected_task_ids_int):
                         error = "Some selected tasks do not exist."
+                    elif already_linked_task is not None:
+                        error = "Each task can only be linked to one wager."
                     elif any(task.team_id != selected_team.id for task in selected_tasks):
                         error = "Selected tasks must belong to the chosen team."
                     elif any(task.status == "done" for task in selected_tasks):
@@ -1013,6 +1172,11 @@ def create_app(test_config=None):
             if getattr(link, "task_id", None) is not None
         }
 
+        used_by_other_wagers_query = db.session.query(WagerTask.task_id).filter(
+            WagerTask.task_id.isnot(None),
+            WagerTask.wager_id != wager.id,
+        )
+
         if existing_task_ids:
             task_filter = or_(
                 Task.status != "done",
@@ -1025,6 +1189,7 @@ def create_app(test_config=None):
             Task.query.filter(
                 Task.team_id == wager.team_id,
                 task_filter,
+                ~Task.id.in_(used_by_other_wagers_query),
             )
             .order_by(Task.created_at.asc())
             .all()
@@ -1053,8 +1218,8 @@ def create_app(test_config=None):
 
             if not error:
                 try:
-                    start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+                    start_date = parse_wager_date(start_date_raw)
+                    end_date = parse_wager_date(end_date_raw)
 
                     if end_date < start_date:
                         error = "End Date cannot be earlier than Start Date."
@@ -1076,8 +1241,15 @@ def create_app(test_config=None):
                         Task.query.filter(Task.id.in_(selected_task_ids_int)).all()
                     )
 
+                    already_linked_task = WagerTask.query.filter(
+                        WagerTask.task_id.in_(selected_task_ids_int),
+                        WagerTask.wager_id != wager.id,
+                    ).first()
+
                     if len(selected_tasks) != len(selected_task_ids_int):
                         error = "Some selected tasks do not exist."
+                    elif already_linked_task is not None:
+                        error = "Each task can only be linked to one wager."
                     elif any(task.team_id != wager.team_id for task in selected_tasks):
                         error = "Selected tasks must belong to the wager team."
                     else:

@@ -66,6 +66,10 @@
                         <span class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
                             <i class="fas fa-clipboard-check text-sm"></i>
                         </span>
+                        {% elif n.type == 'nudge' %}
+                        <span class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                            <i class="fas fa-hand-point-right text-sm"></i>
+                        </span>
                         {% else %}
                         <span class="w-10 h-10 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center">
                             <i class="fas fa-bell text-sm"></i>
