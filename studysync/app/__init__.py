@@ -32,8 +32,8 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
-def create_app():
-    app = Flask(__name__, instance_relative_config=True)
+def create_app(test_config=None):
+    app = Flask(__name__, template_folder='../frontend/templates')
 
     os.makedirs(app.instance_path, exist_ok=True)
 
@@ -44,6 +44,9 @@ def create_app():
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         WTF_CSRF_ENABLED=True,
     )
+
+    if test_config is not None:
+        app.config.update(test_config)
 
     db.init_app(app)
     login_manager.init_app(app)
