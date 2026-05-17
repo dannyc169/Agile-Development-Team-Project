@@ -29,11 +29,12 @@ def fill_and_submit_register(driver, base_url, username, password):
     driver.find_element(By.NAME, "password").send_keys(password)
     driver.find_element(By.NAME, "confirm_password").send_keys(password)
     driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+    wait_for(driver, EC.url_contains("/dashboard"))
 
 
 def open_user_menu_and_logout(driver):
-    wait_for(driver, EC.element_to_be_clickable((By.ID, "openUserModalBtn"))).click()
-    wait_for(driver, EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Logout']"))).click()
+    logout_form = wait_for(driver, EC.presence_of_element_located((By.CSS_SELECTOR, "form[action$='/logout']")))
+    driver.execute_script("arguments[0].submit();", logout_form)
 
 
 @pytest.mark.e2e
