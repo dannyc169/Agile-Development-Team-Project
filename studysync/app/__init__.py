@@ -39,15 +39,10 @@ def create_app(test_config=None):
 
     database_path = os.path.join(app.instance_path, "studysync.db")
 
-    if os.getenv("APP_ENV") == "production" and not os.getenv("SECRET_KEY"):
-        raise RuntimeError("SECRET_KEY must be set in production.")
-    
     secret_key = (test_config or {}).get("SECRET_KEY") or os.getenv("SECRET_KEY")
 
-    if not secret_key and not app.debug:
-        raise RuntimeError(
-            "SECRET_KEY must be set when running outside debug mode."
-        )
+    if os.getenv("APP_ENV") == "production" and not secret_key:
+        raise RuntimeError("SECRET_KEY must be set in production.")
     
     app.config.from_mapping(
         SECRET_KEY=secret_key or "dev-secret-key",
