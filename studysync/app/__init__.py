@@ -14,7 +14,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, or_
 
 from app.time_utils import now_app_time, today_app_date
-from app.forms import LoginForm, RegisterForm
+from app.forms import LoginForm, RegisterForm, ChangePasswordForm
 
 
 db = SQLAlchemy()
