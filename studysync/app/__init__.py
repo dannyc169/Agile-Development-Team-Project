@@ -38,6 +38,10 @@ def create_app(test_config=None):
     os.makedirs(app.instance_path, exist_ok=True)
 
     database_path = os.path.join(app.instance_path, "studysync.db")
+
+    if os.getenv("APP_ENV") == "production" and not os.getenv("SECRET_KEY"):
+        raise RuntimeError("SECRET_KEY must be set in production.")
+    
     app.config.from_mapping(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret-key"),
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path}",
