@@ -65,26 +65,22 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
-                <input type="text"
+                <input type="date"
                        name="start_date"
                        value="{{ form_data.start_date }}"
-                       placeholder="YYYY-MM-DD"
-                       maxlength="10"
-                       pattern="\d{4}-\d{2}-\d{2}"
-                       title="Use YYYY-MM-DD format"
+                       min="2000-01-01"
+                       max="2099-12-31"
                        class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                        {% if not teams %}disabled{% endif %}>
             </div>
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
-                <input type="text"
+                <input type="date"
                        name="end_date"
                        value="{{ form_data.end_date }}"
-                       placeholder="YYYY-MM-DD"
-                       maxlength="10"
-                       pattern="\d{4}-\d{2}-\d{2}"
-                       title="Use YYYY-MM-DD format"
+                       min="2000-01-01"
+                       max="2099-12-31"
                        class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                        {% if not teams %}disabled{% endif %}>
             </div>
