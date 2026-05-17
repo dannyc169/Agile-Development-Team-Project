@@ -9,6 +9,7 @@ from app import db
 from app.forms import TeamCreateForm, TeamJoinForm
 from app.models import (
     Activity,
+    Notification,
     Nudge,
     Task,
     Team,
@@ -320,6 +321,18 @@ def nudge_task(team_id, task_id):
                 f"{current_user.username} nudged {recipient_name} "
                 f"to finish {task.title}."
             ),
+        )
+    )
+
+    db.session.add(
+        Notification(
+            user_id=task_owner_id,
+            type="nudge",
+            message=(
+                f'{current_user.username} nudged your task: '
+                f'"{task.title}" in {team.name}.'
+            ),
+            link=url_for("teams.team_detail", team_id=team.id),
         )
     )
 
