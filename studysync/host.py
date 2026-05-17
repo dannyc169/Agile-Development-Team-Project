@@ -1,7 +1,8 @@
 import os
 
 from app import create_app, db
-
+from dotenv import load_dotenv
+load_dotenv()
 
 def create_host_app():
     app = create_app()

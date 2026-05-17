@@ -3,7 +3,8 @@ import os
 import pytest
 
 from app import create_app, db
-
+import os
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 @pytest.fixture()
 def app(tmp_path):
