@@ -42,7 +42,7 @@ def create_app(test_config=None):
     if os.getenv("APP_ENV") == "production" and not os.getenv("SECRET_KEY"):
         raise RuntimeError("SECRET_KEY must be set in production.")
     
-    secret_key = os.getenv("SECRET_KEY")
+    secret_key = (test_config or {}).get("SECRET_KEY") or os.getenv("SECRET_KEY")
 
     if not secret_key and not app.debug:
         raise RuntimeError(
